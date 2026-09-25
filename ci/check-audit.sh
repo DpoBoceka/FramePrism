@@ -40,7 +40,7 @@ done
 AUDIT_BIN="${CI_CARGO_AUDIT_BIN:-$REPO/deps/pinned-binaries/cargo-audit}"
 DB="$REPO/deps/rustsec-advisory-db"
 PIN_ADVISORIES="Loaded 1246 security advisories"
-PIN_DEPS="124 crate dependencies"
+PIN_DEPS="118 crate dependencies"
 
 echo "=== ci check-audit: $(date '+%Y-%m-%d %H:%M:%S') repo=$REPO ==="
 
