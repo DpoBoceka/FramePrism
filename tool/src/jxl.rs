@@ -817,10 +817,9 @@ fn collect(
     output_root: &Path,
     frames: &mut Vec<(PathBuf, PathBuf)>,
     sidecars: &mut Vec<(PathBuf, PathBuf)>,
-    visited: &mut HashSet<(u64, u64)>,
+    visited: &mut HashSet<crate::DirId>,
 ) -> Result<()> {
-    let meta = std::fs::metadata(dir)?;
-    let id = crate::file_id(&meta);
+    let id = crate::dir_id(dir)?;
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

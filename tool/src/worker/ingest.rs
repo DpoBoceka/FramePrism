@@ -446,12 +446,11 @@ pub fn write_ingest_manifest(
 /// hard-link fan-in / cycle a no-op, never a recursion.
 pub fn collect_dng_frames(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut out: Vec<PathBuf> = Vec::new();
-    let mut visited: std::collections::HashSet<(u64, u64)> = std::collections::HashSet::new();
+    let mut visited: std::collections::HashSet<crate::DirId> = std::collections::HashSet::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let meta = std::fs::metadata(&dir)
+        let id = crate::dir_id(&dir)
             .map_err(|err| format!("read dir {}: {err}", dir.display()))?;
-        let id = crate::file_id(&meta);
         if !visited.insert(id) {
             continue;
         }

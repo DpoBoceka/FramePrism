@@ -318,12 +318,11 @@ struct JxlDesc {
 fn walk(
     base: &Path,
     dir: &Path,
-    visited: &mut std::collections::HashSet<(u64, u64)>,
+    visited: &mut std::collections::HashSet<crate::DirId>,
     visit_file: &mut dyn FnMut(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
-    let meta = std::fs::metadata(dir)
+    let id = crate::dir_id(dir)
         .with_context(|| format!("read dir {}", dir.display()))?;
-    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

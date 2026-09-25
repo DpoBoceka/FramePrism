@@ -282,7 +282,7 @@ jobs:
     # --codec jxl spawns cjxl/djxl from PATH at runtime; the committed
     # pins are mac-only, so this artifact uses a host cjxl/djxl when
     # present.
-    name: cargo build --locked --release (windows-latest — release binary + artifact)
+    name: cargo build --locked --release (windows-latest — release binary + artifact + the runtime traversal test)
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -322,6 +322,11 @@ jobs:
         run: |
           cd tool
           cargo build --locked --release
+
+      - name: Run the windows runtime test (the file-identity collision + the walker guard — the identity proven on a real windows host)
+        run: |
+          cd tool
+          cargo test --locked --release --lib -- cycle_guard
 
       - name: Upload the windows artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4

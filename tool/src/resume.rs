@@ -121,7 +121,7 @@ const TEMP_SUFFIXES: &[&str] = &[".dng.tmp", ".sidecar.tmp"];
 /// failure is named on stderr, never an error.
 pub fn clean_temp_files(output: &Path) -> Vec<String> {
     let mut removed: Vec<String> = Vec::new();
-    let mut visited: HashSet<(u64, u64)> = HashSet::new();
+    let mut visited: HashSet<crate::DirId> = HashSet::new();
     clean_temp_dir(output, output, &mut removed, &mut visited);
     removed.sort();
     removed
@@ -143,12 +143,11 @@ fn clean_temp_dir(
     root: &Path,
     dir: &Path,
     removed: &mut Vec<String>,
-    visited: &mut HashSet<(u64, u64)>,
+    visited: &mut HashSet<crate::DirId>,
 ) {
-    let Some(meta) = std::fs::metadata(dir).ok() else {
+    let Ok(id) = crate::dir_id(dir) else {
         return;
     };
-    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return;
     }
