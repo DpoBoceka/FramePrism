@@ -1,0 +1,15 @@
+# Dependabot — the two ecosystems the lockfile + the workflow consume.
+# The advisory-DB snapshot (deps/rustsec-advisory-db) is NOT dependabot-managed:
+# it is a pinned contract input — its refresh is the documented maintainer step
+# (docs/security.md, the refresh procedure). A Dependabot PR that breaks the
+# byte contract fails the required CI check and does not merge.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/tool"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
