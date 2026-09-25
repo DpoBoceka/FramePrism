@@ -623,7 +623,7 @@ suite\t202 passed; 0 failed; 1 ignored\tprobed-by-check.sh\tnote c\n",
         let rows = vec![
             PinRow {
                 component: "tool".into(),
-                expected: "0.1.1".into(),
+                expected: "0.2.0".into(),
                 probe: "toml-grep".into(),
                 note: String::new(),
             },
