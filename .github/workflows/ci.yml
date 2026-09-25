@@ -229,9 +229,19 @@ jobs:
     # `--locked` keeps the committed Cargo.lock authoritative (a drift
     # is a named FAIL, not a silent re-resolve). The run step is from
     # the manifest root (tool/ — the repo root has no Cargo.toml).
-    name: cargo check --locked (windows-latest — source-portability CHECK only, not a contract build)
+    # The host dep build step (additive): tool/build.rs resolves the
+    # JPEG_TURBO_PREFIX even under cargo check, and the committed
+    # prefix is a darwin build that lacks the MSVC static names
+    # (jpeg-static.lib / turbojpeg-static.lib) — without the
+    # host-built prefix the windows target is a named build refusal.
+    # (check-linux needs no such step: the unix static names
+    # libjpeg.a / libturbojpeg.a exist in the committed prefix, and
+    # cargo check never links them.)
+    name: cargo check --locked (windows-latest — source-portability CHECK, host deps built — not a contract build)
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
@@ -249,6 +259,11 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
 
       - name: Source-portability check (NOT the contract build)
         run: |
