@@ -40,7 +40,7 @@ cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the comm
 ./tool/target/release/frameprism decode clips/ decoded/
 ```
 
-Linux / Windows (the host prefix first — the committed one is a Darwin build):
+Linux / Windows (Git Bash — the host prefix first — the committed one is a Darwin build):
 
 ```sh
 deps/fetch.sh && deps/build-libjpeg.sh   # → deps/.jpeg-prefix (the host build)
