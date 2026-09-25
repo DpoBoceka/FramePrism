@@ -21,11 +21,14 @@
 # present.
 #
 # Hardening (the publication review): least-privilege permissions
-# (contents: write for the release publish + actions: write for the
-# cache service API — the workflow uses NO secrets, so there is
-# nothing for a run to exfiltrate), a wall-clock timeout, and the
-# action pins at commit SHAs (the tag is named in the comment — a tag
-# move cannot silently change what runs).
+# (contents: read at the workflow level — the build jobs run
+# repo-controlled scripts + build.rs; the contents: write is the
+# publish job's job-level grant — the softprops publish is the single
+# contents-write consumer; actions: write for the cache service API —
+# the workflow uses NO secrets, so there is nothing for a run to
+# exfiltrate), a wall-clock timeout, and the action pins at commit
+# SHAs (the tag is named in the comment — a tag move cannot silently
+# change what runs).
 #
 # Honest limit (the tag trigger): this workflow cannot be exercised in
 # a PR run — its first real run is the next `v*` tag (a post-merge tag
@@ -42,8 +45,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write   # the softprops/action-gh-release publish (create the release + its assets on the tag's ref — the tag-only trigger means never a fork PR)
-  actions: write   # the actions/cache service API (write covers the restore lookup + the save — the zero-secrets posture: the workflow uses NO secrets)
+  contents: read   # the default for the build jobs (they run the repo-controlled scripts + build.rs — the contents write is the publish job's job-level grant)
+  actions: write   # the actions/cache service API — the documented permission requirement (the build jobs SAVE caches; write covers the restore lookup + the save)
 
 jobs:
   build-macos:
@@ -238,6 +241,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-macos, build-linux, build-windows]
+    permissions:
+      contents: write   # the softprops/action-gh-release publish is the single contents-write consumer (create the release + its assets on the tag's ref)
     steps:
       - name: Download the macos artifact (its own subdir — the file inside is `frameprism`)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
