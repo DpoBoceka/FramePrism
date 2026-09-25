@@ -23,6 +23,25 @@
 //! archive. The tool NEVER wipes the card: `CARD UNLOCKED` is the
 //! human's release (the operator formats only after seeing it).
 //!
+//! The `--eject` surface (the verify-before-unmount auto-eject):
+//! `frameprism audit <archive> --source <card-root> --eject` — the
+//! eject is an ADDITIVE action after the CARD verdict prints, and ONLY
+//! `CARD UNLOCKED` sanctions it (the named `CARD EJECTED` line — the
+//! card's volume is unmounted; the eject is an UNMOUNT only: the tool
+//! still never wipes the card — the format remains the operator's
+//! action). `CARD REFUSED` / `UNVERIFIABLE` + `--eject` = the named
+//! `EJECT REFUSED` lines (the audit's rc UNCHANGED — the card stays as
+//! evidence / the rows are unverified); the eject command's failure =
+//! the named `EJECT FAIL` line + rc 1; windows = the named platform
+//! refusal (the std-only boundary — no FFI). The platform eject is the
+//! std-only spawn (the jxl host-tool pattern): macOS =
+//! `diskutil eject <mount-point>`; Linux = the /proc/mounts
+//! longest-prefix match of the source path → `eject <device>`;
+//! the env override `FP_EJECT_CMD` REPLACES the spawned eject command
+//! (the documented test seam — the `CI_CARGO_AUDIT_BIN` precedent:
+//! the tests use a fake eject binary that records its args + exits
+//! 0/1; unset = the platform command).
+//!
 //! Determinism (the contract): NO wall clock — the same source
 //! state produces the same bytes; the rows are sorted by path.
 //!
@@ -448,6 +467,282 @@ impl CardClass {
     }
 }
 
+/// The `--eject` outcome class (the named line + the ledger token +
+/// the rc effect — the pure decision the audit caller renders;
+/// unit-testable without the CLI).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EjectResult {
+    /// `CARD UNLOCKED` + the eject command succeeded — the volume is
+    /// released (the audit's rc is UNCHANGED: 0).
+    Ejected,
+    /// The named refusal — NEVER eject: the CARD verdict is not
+    /// UNLOCKED (the card stays as evidence / the rows are unverified),
+    /// or the platform does not support the auto-eject (windows — the
+    /// std-only boundary: the UNLOCKED verdict + rc 0 stand; the release
+    /// is not refused, only the auto-eject). The audit's rc is
+    /// UNCHANGED.
+    Refused,
+    /// The requested eject command failed (device busy, not a volume,
+    /// missing binary) — the named FAIL line + rc 1 (the requested
+    /// action did not happen — the operator must know; the verdict
+    /// line above already printed).
+    Failed,
+}
+
+impl EjectResult {
+    /// The rc effect (the audit's own verdict stands — the eject is an
+    /// ADDITIVE action after the verdict prints: the refusal leaves the
+    /// audit's rc UNCHANGED; only the requested-but-failed eject
+    /// overrides to the named rc=1).
+    pub fn rc_override(self) -> Option<u8> {
+        match self {
+            EjectResult::Failed => Some(1),
+            EjectResult::Ejected | EjectResult::Refused => None,
+        }
+    }
+}
+
+/// The platform eject's raw result (the spawn's outcome — the detail
+/// string names the command + the error).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EjectAttempt {
+    /// The eject command completed (rc 0) — the volume is released.
+    Released,
+    /// The platform does not support the auto-eject (windows — the
+    /// std-only boundary): the named refusal; the UNLOCKED verdict +
+    /// rc 0 stand (the release is not refused, only the auto-eject).
+    Unsupported,
+    /// The eject command failed (spawn error / nonzero rc / missing
+    /// binary) — the named FAIL (the command + the error, named in the
+    /// detail).
+    Failed(String),
+}
+
+/// The platform refusal's named line (the std-only boundary — windows:
+/// a specific-volume eject has no clean std mechanism — `eject`
+/// handles the default drive only; the Shell API needs FFI. The
+/// UNLOCKED verdict + rc 0 stand: the release is not refused, only
+/// the auto-eject).
+pub const EJECT_PLATFORM_REFUSED_LINE: &str = "EJECT REFUSED (the auto-eject is not yet supported on this platform — the card stays mounted; CARD UNLOCKED still releases it for the operator's own unmount)";
+
+/// The `--eject` surface's complete outcome: the named line, the
+/// ledger token (the verdict column's additive eject outcome), and
+/// the outcome class.
+pub struct EjectOutcome {
+    /// The outcome class (the rc effect via `EjectResult::rc_override`).
+    pub result: EjectResult,
+    /// The named line (printed AFTER the CARD verdict line).
+    pub line: String,
+    /// The ops-ledger verdict column (the CARD_* + the eject outcome's
+    /// additive token — the QC_GATE-style convention).
+    pub ledger: &'static str,
+}
+
+/// The named line + the ledger token, from the outcome class + the
+/// CARD verdict's class + the mount point (+ the failure detail, named
+/// in the FAIL line). Pure (no spawn — the spawn is `eject_attempt`):
+/// the line wordings are the contract (asserted byte-exact in the
+/// tests).
+pub fn eject_outcome_line(
+    result: EjectResult,
+    class: CardClass,
+    mount_point: &Path,
+    fail_detail: Option<&str>,
+) -> EjectOutcome {
+    match (result, class) {
+        (EjectResult::Ejected, CardClass::Unlocked) => EjectOutcome {
+            result,
+            line: format!(
+                "CARD EJECTED ({mount_point} — the verify-before-wipe gate is clean; the card is released + ejected)",
+                mount_point = mount_point.display()
+            ),
+            ledger: "CARD_OK_EJECTED",
+        },
+        (EjectResult::Refused, CardClass::Refused) => EjectOutcome {
+            result,
+            line: "EJECT REFUSED (the CARD verdict is REFUSED — the card must stay as evidence; no eject)".into(),
+            ledger: "CARD_REFUSED_EJECT_REFUSED",
+        },
+        (EjectResult::Refused, CardClass::Unverifiable) => EjectOutcome {
+            result,
+            line: "EJECT REFUSED (the CARD verdict is UNVERIFIABLE — the source rows could not be verified; no eject)".into(),
+            ledger: "CARD_UNVERIFIABLE_EJECT_REFUSED",
+        },
+        (EjectResult::Refused, CardClass::Unlocked) => EjectOutcome {
+            result,
+            line: EJECT_PLATFORM_REFUSED_LINE.into(),
+            ledger: "CARD_OK_EJECT_REFUSED",
+        },
+        (EjectResult::Failed, CardClass::Unlocked) => {
+            let detail = fail_detail.expect(
+                "internal: the Failed arm carries the detail (the command + the error, named)",
+            );
+            EjectOutcome {
+                result,
+                line: format!(
+                    "EJECT FAIL (the eject command failed: {detail}; the requested eject did not happen — the card is still mounted)"
+                ),
+                ledger: "CARD_OK_EJECT_FAIL",
+            }
+        }
+        // The (outcome, class) combos the gate cannot produce (the
+        // eject is only attempted on UNLOCKED; the refusals only on
+        // the non-UNLOCKED classes or the platform refusal) — named,
+        // not silent.
+        (r, c) => panic!("internal: the eject gate cannot produce ({r:?}, {c:?})"),
+    }
+}
+
+/// The `--eject` surface (the verify-before-unmount release gate):
+/// the named line + the ledger token + the outcome class, from the
+/// CARD verdict's class + the platform eject. The gate (the safety
+/// property): ONLY `CARD UNLOCKED` sanctions the eject — `CARD
+/// REFUSED` / `UNVERIFIABLE` + `--eject` is the named refusal and NO
+/// spawn is attempted (the card stays as evidence / the rows are
+/// unverified); the audit's rc is UNCHANGED. The eject command's
+/// failure = the named FAIL (rc 1 — the requested action did not
+/// happen). The eject is an UNMOUNT only: the tool still never wipes
+/// the card (the format remains the operator's action).
+pub fn eject_after_verdict(class: CardClass, mount_point: &Path) -> EjectOutcome {
+    let (result, detail) = match class {
+        CardClass::Unlocked => match eject_attempt(mount_point) {
+            EjectAttempt::Released => (EjectResult::Ejected, None),
+            EjectAttempt::Unsupported => (EjectResult::Refused, None),
+            EjectAttempt::Failed(e) => (EjectResult::Failed, Some(e)),
+        },
+        // The refusal classes: no spawn is attempted (the gate).
+        CardClass::Refused | CardClass::Unverifiable => (EjectResult::Refused, None),
+    };
+    eject_outcome_line(result, class, mount_point, detail.as_deref())
+}
+
+/// The platform eject (the std-only spawn — the jxl host-tool
+/// pattern): macOS = `diskutil eject <mount-point>`; Linux = the
+/// /proc/mounts longest-prefix match of the source path → `eject
+/// <device>` (util-linux); windows = the named platform refusal (the
+/// std-only boundary — no FFI; a specific-volume eject has no clean std
+/// mechanism). The env override `FP_EJECT_CMD` REPLACES the spawned
+/// eject command (the documented test seam — the `CI_CARGO_AUDIT_BIN`
+/// precedent: the tests use a fake eject binary that records its args
+/// + exits 0/1; unset = the platform command).
+pub fn eject_attempt(mount_point: &Path) -> EjectAttempt {
+    // The FP_EJECT_CMD override (the documented test seam).
+    if let Ok(cmd) = std::env::var("FP_EJECT_CMD") {
+        if cmd.is_empty() {
+            return EjectAttempt::Failed(
+                "FP_EJECT_CMD is set to the empty string (name the override command)".into(),
+            );
+        }
+        return match std::process::Command::new(&cmd).arg(mount_point).output() {
+            Ok(out) if out.status.success() => EjectAttempt::Released,
+            Ok(out) => EjectAttempt::Failed(format!(
+                "the FP_EJECT_CMD override {cmd:?} exited with code {:?}",
+                out.status.code()
+            )),
+            Err(e) => EjectAttempt::Failed(format!(
+                "the FP_EJECT_CMD override {cmd:?} could not be spawned: {e}"
+            )),
+        };
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let desc = format!("diskutil eject {}", mount_point.display());
+        match std::process::Command::new("diskutil")
+            .arg("eject")
+            .arg(mount_point)
+            .status()
+        {
+            Ok(st) if st.success() => EjectAttempt::Released,
+            Ok(st) => EjectAttempt::Failed(format!(
+                "{desc} exited with code {:?}",
+                st.code()
+            )),
+            Err(e) => EjectAttempt::Failed(format!("{desc} could not be spawned: {e}")),
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mounts = match std::fs::read_to_string("/proc/mounts") {
+            Ok(m) => m,
+            Err(e) => {
+                return EjectAttempt::Failed(format!("cannot read /proc/mounts: {e}"))
+            }
+        };
+        let source = mount_point.to_string_lossy();
+        match linux_mount_device(&mounts, &source) {
+            Some(device) => {
+                let desc = format!("eject {device}");
+                match std::process::Command::new("eject").arg(&device).status() {
+                    Ok(st) if st.success() => EjectAttempt::Released,
+                    Ok(st) => EjectAttempt::Failed(format!(
+                        "{desc} exited with code {:?}",
+                        st.code()
+                    )),
+                    Err(e) => EjectAttempt::Failed(format!("{desc} could not be spawned: {e}")),
+                }
+            }
+            None => EjectAttempt::Failed(format!(
+                "no /proc/mounts entry matches the source path {source} (the card is not a mount)"
+            )),
+        }
+    }
+    #[cfg(windows)]
+    {
+        // The named platform refusal (the std-only boundary — the
+        // refusal is NAMED, never a silent gap): `eject`
+        // handles the default drive only, and the Shell API needs FFI.
+        // The UNLOCKED verdict + rc 0 stand: the release is not
+        // refused, only the auto-eject.
+        EjectAttempt::Unsupported
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    {
+        // The named refusal on a non-contract target (never a silent
+        // gap — none of the three CI targets).
+        EjectAttempt::Unsupported
+    }
+}
+
+/// The device of the /proc/mounts line whose mount point is the
+/// LONGEST prefix of the source path (the deepest mount containing it
+/// — the card's volume, not the enclosing filesystem). Pure string
+/// logic (the text is passed in — unit-testable without a
+/// /proc/mounts). The match is at a PATH BOUNDARY (a
+/// `/media/x/SDCARD2` line must not match the `/media/x/SDCARD`
+/// source — the raw byte prefix would).
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn linux_mount_device(mounts_text: &str, source: &str) -> Option<String> {
+    let mut best: Option<(usize, String)> = None;
+    for line in mounts_text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 2 {
+            continue;
+        }
+        let (device, mp) = (f[0], f[1]);
+        if !is_mount_prefix(source, mp) {
+            continue;
+        }
+        if best.as_ref().map_or(true, |(len, _)| mp.len() > *len) {
+            best = Some((mp.len(), device.to_string()));
+        }
+    }
+    best.map(|(_, device)| device)
+}
+
+/// The path-boundary prefix match: `source == mp`, or `mp` is a proper
+/// prefix of `source` ending at a `/` boundary (the root `/` matches
+/// everything).
+#[cfg(any(target_os = "linux", test))]
+fn is_mount_prefix(source: &str, mp: &str) -> bool {
+    if source == mp {
+        return true;
+    }
+    if mp.is_empty() || !source.starts_with(mp) {
+        return false;
+    }
+    mp == "/" || source.as_bytes()[mp.len()] == b'/'
+}
+
 /// The CARD verdict line (the exact wordings) + the class, from
 /// the verified/dirty row counts + the archive audit's offender count.
 /// UNLOCKED is printed ONLY when every source row is OK AND the
@@ -870,5 +1165,146 @@ mod tests {
         assert_eq!(u.rc(0), 0);
         assert_eq!(u.rc(3), 1);
         assert_eq!(u.ledger_verdict(), "CARD_UNVERIFIABLE");
+    }
+
+    // -------------------------------------------------------------------
+    //: the --eject surface (the verify-before-unmount auto-eject —
+    // the gating matrix's pure half: the wordings, the tokens, the
+    // rc effect, the seam, the /proc/mounts resolution)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn eject_gate_non_unlocked_classes_are_named_refusals_without_spawn() {
+        // The gating matrix's safety property: a non-UNLOCKED verdict
+        // + `--eject` = the named EJECT REFUSED lines — NO spawn is
+        // attempted (the refusal classes never read the seam / spawn
+        // — the card stays as evidence / the rows are unverified),
+        // and the audit's rc is UNCHANGED (the rc_override None).
+        let eo = eject_after_verdict(CardClass::Refused, Path::new("/card"));
+        assert_eq!(eo.result, EjectResult::Refused);
+        assert_eq!(
+            eo.line,
+            "EJECT REFUSED (the CARD verdict is REFUSED — the card must stay as evidence; no eject)"
+        );
+        assert_eq!(eo.ledger, "CARD_REFUSED_EJECT_REFUSED");
+        assert_eq!(eo.result.rc_override(), None, "the refusal leaves the audit's rc UNCHANGED");
+        let eo = eject_after_verdict(CardClass::Unverifiable, Path::new("/card"));
+        assert_eq!(eo.result, EjectResult::Refused);
+        assert_eq!(
+            eo.line,
+            "EJECT REFUSED (the CARD verdict is UNVERIFIABLE — the source rows could not be verified; no eject)"
+        );
+        assert_eq!(eo.ledger, "CARD_UNVERIFIABLE_EJECT_REFUSED");
+        assert_eq!(eo.result.rc_override(), None, "the rc follows the archive audit (UNCHANGED by the flag)");
+    }
+
+    #[test]
+    fn eject_outcome_lines_are_the_named_wordings() {
+        // The gating matrix's wordings (pure — no spawn): the lines
+        // are the contract (byte-exact).
+        // The EJECTED line (the mount point named — the `--source`
+        // arg's resolved volume mount point).
+        let eo = eject_outcome_line(
+            EjectResult::Ejected,
+            CardClass::Unlocked,
+            Path::new("/Volumes/SDCARD"),
+            None,
+        );
+        assert_eq!(eo.result, EjectResult::Ejected);
+        assert_eq!(
+            eo.line,
+            "CARD EJECTED (/Volumes/SDCARD — the verify-before-wipe gate is clean; the card is released + ejected)"
+        );
+        assert_eq!(eo.ledger, "CARD_OK_EJECTED");
+        assert_eq!(eo.result.rc_override(), None, "the audit's verdict is unchanged (rc 0)");
+        // The platform refusal (the std-only boundary — windows).
+        let eo = eject_outcome_line(
+            EjectResult::Refused,
+            CardClass::Unlocked,
+            Path::new("/Volumes/SDCARD"),
+            None,
+        );
+        assert_eq!(eo.line, EJECT_PLATFORM_REFUSED_LINE);
+        assert_eq!(eo.ledger, "CARD_OK_EJECT_REFUSED");
+        assert_eq!(
+            eo.result.rc_override(),
+            None,
+            "the UNLOCKED verdict + rc 0 stand — the release is not refused, only the auto-eject"
+        );
+        // The failure (the command + the error, named).
+        let eo = eject_outcome_line(
+            EjectResult::Failed,
+            CardClass::Unlocked,
+            Path::new("/Volumes/SDCARD"),
+            Some("diskutil eject /Volumes/SDCARD exited with code Some(1)"),
+        );
+        assert_eq!(
+            eo.line,
+            "EJECT FAIL (the eject command failed: diskutil eject /Volumes/SDCARD exited with code Some(1); the requested eject did not happen — the card is still mounted)"
+        );
+        assert_eq!(eo.ledger, "CARD_OK_EJECT_FAIL");
+        assert_eq!(eo.result.rc_override(), Some(1), "the requested action did not happen — rc 1");
+    }
+
+    #[test]
+    fn eject_attempt_seam_missing_bin_and_empty_string_are_named_fails() {
+        // The FP_EJECT_CMD seam (the CI_CARGO_AUDIT_BIN precedent):
+        // a missing override binary = the named FAIL (the command +
+        // the spawn error named in the detail); the empty string =
+        // the named FAIL. (No real volume is ever touched.)
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        std::env::set_var("FP_EJECT_CMD", "/nonexistent/frameprism-eject-test-bin");
+        let a = eject_attempt(Path::new("/card"));
+        assert!(
+            matches!(a, EjectAttempt::Failed(ref d) if d.contains("could not be spawned")),
+            "{a:?}"
+        );
+        std::env::set_var("FP_EJECT_CMD", "");
+        let a = eject_attempt(Path::new("/card"));
+        assert!(
+            matches!(a, EjectAttempt::Failed(ref d) if d.contains("set to the empty string")),
+            "{a:?}"
+        );
+        std::env::remove_var("FP_EJECT_CMD");
+    }
+
+    #[test]
+    fn linux_mount_device_longest_prefix_at_path_boundary() {
+        // The /proc/mounts resolution (the linux platform arm's pure
+        // core — unit-testable without a /proc/mounts): the device of
+        // the line whose mount point is the LONGEST prefix of the
+        // source path (the deepest mount containing it), at a path
+        // boundary.
+        let mounts = "\
+/dev/disk1/root / ext4 0 0
+/dev/sdb1 /media/user/SDCARD vfat 0 0
+/dev/sdb1/boot /media/user/SDCARD/BOOT vfat 0 0
+/dev/sdc1 /media/user/SDCARD2 vfat 0 0
+";
+        assert_eq!(linux_mount_device(mounts, "/media/user/SDCARD"), Some("/dev/sdb1".into()));
+        // A subpath of the volume resolves to the same (deepest
+        // containing) mount.
+        assert_eq!(
+            linux_mount_device(mounts, "/media/user/SDCARD/clipA"),
+            Some("/dev/sdb1".into())
+        );
+        // The deepest mount wins (the BOOT partition inside the
+        // volume).
+        assert_eq!(
+            linux_mount_device(mounts, "/media/user/SDCARD/BOOT/fat"),
+            Some("/dev/sdb1/boot".into())
+        );
+        // The path boundary: the /media/user/SDCARD2 line matches the
+        // SDCARD2 source — and ONLY it (a raw byte prefix of the
+        // SDCARD source would also match the SDCARD2 line).
+        assert_eq!(linux_mount_device(mounts, "/media/user/SDCARD2"), Some("/dev/sdc1".into()));
+        assert_eq!(
+            linux_mount_device(mounts, "/media/user/SDCARD2/x"),
+            Some("/dev/sdc1".into())
+        );
+        // The root mount matches everything (the weak fallback).
+        assert_eq!(linux_mount_device(mounts, "/tmp/x"), Some("/dev/disk1/root".into()));
+        // No match → None (the named FAIL at the call site).
+        assert_eq!(linux_mount_device("", "/card"), None);
     }
 }

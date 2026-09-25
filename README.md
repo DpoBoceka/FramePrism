@@ -6,11 +6,10 @@ pipeline. The default output is **j92** — a DNG container carrying lossless JP
 (the 21.1-generation measurement). Two working modes ride the same contract: `--mode log10` (10-bit log codes)
 and `--downscale2x` (a 2× downscale — ~10:1 for proxies).
 
-Known limits (0.1.1): the distribution is the source + the release-page binaries (the
+Known limits (0.2.0): the distribution is the source + the release-page binaries (the
 Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
 (the gate toolchain); the MHL manifest's writer/parser is tested against the adversarial
-suite, round-trip with a third-party implementation not yet exercised; the card `wipe`
-verb and the auto-eject after a verified offload are not yet implemented.
+suite, round-trip with a third-party implementation not yet exercised.
 
 ## Quick start
 
@@ -20,7 +19,7 @@ macOS (the gate toolchain — the committed prefix is the mac host's):
 
 ```sh
 cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the committed deps/.jpeg-prefix
-./tool/target/release/frameprism --version             # frameprism 0.1.1
+./tool/target/release/frameprism --version             # frameprism 0.2.0
 
 # encode a clip (frames in → frames out; the run prints the summary:
 # the frame count, the bytes in/out, the ratio, the wall time):

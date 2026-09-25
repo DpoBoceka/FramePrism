@@ -2,6 +2,12 @@
 
 All notable changes to frameprism.
 
+## 0.2.0
+
+- The card auto-eject — `frameprism audit <archive> --source <card-root> --eject`: the verify-before-unmount release gate completes the card workflow. The eject runs only on `CARD UNLOCKED` (the named `CARD EJECTED` line — the card's volume is unmounted after the verified audit; the eject is an unmount only — the tool still never wipes the card); `CARD REFUSED` / `CARD UNVERIFIABLE` are the named `EJECT REFUSED` lines (the audit's rc unchanged); the eject command's failure is the named `EJECT FAIL` line + rc 1; Windows is the named platform refusal (the std-only boundary — the `CARD UNLOCKED` release stands). The ops-ledger verdict column carries the eject outcome when `--eject` is given. The env override `FP_EJECT_CMD` is the documented test seam (the CI_CARGO_AUDIT_BIN precedent).
+- The README Known-limits fix — the stale "card `wipe` verb" line is gone (the no-wipe property is a design — `docs/card-workflow.md` — not a limit; the auto-eject is implemented, no longer a limit).
+- The dependency freshness — the dalek-3 signing stack, the 3-OS actions, the grouped dependabot.
+
 ## 0.1.1
 
 - The Windows source-portability fix (the portable file identity + the cfg-gated permission branches) — the source compiles and the binary links on all three platforms, proven by CI.

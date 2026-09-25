@@ -31,6 +31,16 @@ pub fn run_audit(args: &AuditArgs) -> ExitCode {
         eprintln!("error: input is not a directory: {}", input.display());
         return ExitCode::from(2);
     }
+    // The --eject gate's precondition (the usage-class refusal — the
+    // eject is the CARD verdict's additive action: no verdict exists
+    // without a source, so no eject does either — named, rc=2;
+    // documented in the flag's help).
+    if args.eject && args.source.is_none() {
+        eprintln!(
+            "error: --eject requires --source (a CARD verdict does not exist without a source — the eject gate is the audit's CARD verdict)"
+        );
+        return ExitCode::from(2);
+    }
     // The ingest-continuity surface: present
     // when the dir carries a `*.ingest-manifest.tsv` record. A dir
     // without one keeps the existing sidecar-only behavior
@@ -453,6 +463,29 @@ pub fn run_audit(args: &AuditArgs) -> ExitCode {
         },
         None => None,
     };
+    //: the --eject surface (the release gate's ADDITIVE action — the
+    // eject runs AFTER the CARD verdict line has printed: the
+    // verdict's own words stand — the refusal leaves the audit's rc
+    // UNCHANGED; only the requested-but-failed eject is the named
+    // rc=1 — the requested action did not happen). `--eject` without
+    // `--source` is the named rc=2 above (the eject gate IS the
+    // verdict), so with `--eject` the class is always present (the
+    // records-class Err arm returned rc=2 before the ledger row — a
+    // refused record ejects nothing: no verdict exists to gate on).
+    let eject_outcome: Option<crate::sourcecheck::EjectOutcome> = if args.eject {
+        let class = card_class.expect(
+            "internal: --eject implies the CARD class (the rc=2 arms above stand first)",
+        );
+        let card_root = args
+            .source
+            .as_ref()
+            .expect("internal: --eject implies --source (the named rc=2 refusal above)");
+        let eo = crate::sourcecheck::eject_after_verdict(class, card_root);
+        println!("{}", eo.line);
+        Some(eo)
+    } else {
+        None
+    };
     // The A3 ops-ledger row (the rotation report's input): the
     // completed audit run — OK/FAIL only (the REFUSED_* classes are
     // the run paths'; the usage-class rc=2s above append nothing).
@@ -464,6 +497,10 @@ pub fn run_audit(args: &AuditArgs) -> ExitCode {
     // free string, the ledger's machinery is unchanged); the audit
     // WITHOUT `--source` keeps the existing OK/FAIL verdicts,
     // unchanged.
+    //: with `--eject` the verdict column carries the eject outcome
+    // (the additive token: CARD_OK_EJECTED / CARD_OK_EJECT_REFUSED /
+    // CARD_OK_EJECT_FAIL / CARD_REFUSED_EJECT_REFUSED /
+    // CARD_UNVERIFIABLE_EJECT_REFUSED — the named line above).
     let audit_frames: usize = if let Some(m) = &reel_m {
         // The reel manifest is the canonical frame count for the reel
         // surface (the member-sweep rows re-verify the same frames
@@ -507,9 +544,10 @@ pub fn run_audit(args: &AuditArgs) -> ExitCode {
     } else {
         "-".to_string() // the ingest-record-only carve-out
     };
-    let verdict = match card_class {
-        Some(class) => class.ledger_verdict(),
-        None => {
+    let verdict = match (card_class, &eject_outcome) {
+        (Some(_), Some(eo)) => eo.ledger,
+        (Some(class), None) => class.ledger_verdict(),
+        (None, _) => {
             if bad == 0 {
                 "OK"
             } else {
@@ -535,22 +573,27 @@ pub fn run_audit(args: &AuditArgs) -> ExitCode {
         // carry the flag): the column is always empty here.
         context: String::new(),
     });
-    match card_class {
-        Some(class) => {
-            //: the CARD rc (the audit-side
-            // re-derived violations ride rc=1; UNVERIFIABLE follows
-            // the archive audit result — an unmounted card is not a
-            // failure of the archive).
-            ExitCode::from(class.rc(bad))
-        }
-        None => {
+    //: the CARD rc (the audit-side
+    // re-derived violations ride rc=1; UNVERIFIABLE follows
+    // the archive audit result — an unmounted card is not a
+    // failure of the archive): the --eject surface's additive rc
+    // effect (the refusal leaves the rc UNCHANGED; only the
+    // requested-but-failed eject is the named rc=1).
+    let rc = match (card_class, &eject_outcome) {
+        (Some(class), Some(eo)) => eo
+            .result
+            .rc_override()
+            .unwrap_or_else(|| class.rc(bad)),
+        (Some(class), None) => class.rc(bad),
+        (None, _) => {
             if bad == 0 {
-                ExitCode::SUCCESS
+                0
             } else {
-                ExitCode::from(1)
+                1
             }
         }
-    }
+    };
+    ExitCode::from(rc)
 }
 
 /// `frameprism restore` — repair the offenders from a pristine master.
@@ -990,6 +1033,130 @@ mod tests {
         assert_eq!(verdict.as_deref(), Some("OK"), "the verdict stands (no --source)");
         let _ = std::fs::remove_dir_all(archive.parent().unwrap());
         let _ = std::fs::remove_dir_all(&card);
+    }
+
+    // -------------------------------------------------------------------
+    //: the --eject surface (the verify-before-unmount auto-eject —
+    // the gating matrix end-to-end, via the FP_EJECT_CMD seam + the
+    // inline-generated fake eject binary; the pure half — the wordings,
+    // the tokens, the /proc/mounts resolution — is the sourcecheck
+    // module's tests)
+    // -------------------------------------------------------------------
+
+    #[cfg(unix)]
+    #[test]
+    fn p8c9_audit_eject_unlocked_ejects_mount_and_ledger_card_ok_ejected() {
+        // The gating matrix's UNLOCKED case: a clean source + a clean
+        // archive + `--eject` → the eject IS run (the fake records
+        // the mount point = the `--source` arg), the audit's rc is
+        // UNCHANGED (0) + the ledger's CARD_OK_EJECTED token.
+        let (archive, card, _rec) = mk_source_audit_dir("eject-unlocked");
+        let base = archive.parent().unwrap().to_path_buf();
+        let fake = base.join("fake-eject.sh");
+        write_fake_eject(&fake);
+        let log = base.join("eject.log");
+        let (rc, verdict) = run_eject(&archive, Some(&card), &fake, &log, None);
+        assert_eq!(rc, ExitCode::SUCCESS, "UNLOCKED + eject = the audit's rc UNCHANGED (0)");
+        assert_eq!(verdict.as_deref(), Some("CARD_OK_EJECTED"));
+        let recorded = std::fs::read_to_string(&log).unwrap_or_default();
+        assert_eq!(
+            recorded.trim(),
+            card.to_str().unwrap(),
+            "the fake recorded the mount point (the --source arg)"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p8c9_audit_eject_refused_never_ejects_and_ledger_card_refused_eject_refused() {
+        // The gating matrix's REFUSED case (a corrupted source row):
+        // the named EJECT REFUSED line — the eject is NEVER attempted
+        // (the fake is not called — the card stays as evidence), the
+        // audit's rc is UNCHANGED (1) + the ledger's
+        // CARD_REFUSED_EJECT_REFUSED token.
+        let (archive, card, _rec) = mk_source_audit_dir("eject-refused");
+        let base = archive.parent().unwrap().to_path_buf();
+        let mut flipped = b"encoded-frame-bytes".to_vec();
+        flipped[3] ^= 0xFF;
+        std::fs::write(card.join("f1.DNG"), &flipped).unwrap();
+        let fake = base.join("fake-eject.sh");
+        write_fake_eject(&fake);
+        let log = base.join("eject.log");
+        let (rc, verdict) = run_eject(&archive, Some(&card), &fake, &log, None);
+        assert_eq!(
+            rc,
+            ExitCode::from(1),
+            "a dirty source row keeps the card locked (CARD REFUSED) — the rc UNCHANGED by --eject"
+        );
+        assert_eq!(verdict.as_deref(), Some("CARD_REFUSED_EJECT_REFUSED"));
+        assert!(!log.exists(), "the REFUSED class never spawns the eject (the card stays as evidence)");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p8c9_audit_eject_unverifiable_never_ejects_and_ledger_card_unverifiable_eject_refused() {
+        // The gating matrix's UNVERIFIABLE case (the card absent):
+        // the named EJECT REFUSED line — the eject is NEVER attempted,
+        // the rc follows the archive audit (UNCHANGED by the flag) +
+        // the ledger's CARD_UNVERIFIABLE_EJECT_REFUSED token.
+        let (archive, _card, _rec) = mk_source_audit_dir("eject-unverifiable");
+        let base = archive.parent().unwrap().to_path_buf();
+        let absent = base.join("absent-card");
+        let fake = base.join("fake-eject.sh");
+        write_fake_eject(&fake);
+        let log = base.join("eject.log");
+        let (rc, verdict) = run_eject(&archive, Some(&absent), &fake, &log, None);
+        assert_eq!(rc, ExitCode::SUCCESS, "the rc follows the (clean) archive audit — UNCHANGED by --eject");
+        assert_eq!(verdict.as_deref(), Some("CARD_UNVERIFIABLE_EJECT_REFUSED"));
+        assert!(!log.exists(), "the UNVERIFIABLE class never spawns the eject (the rows are not verified)");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p8c9_audit_eject_without_source_is_named_rc2() {
+        // `--eject` without `--source`: the usage-class named refusal
+        // (a CARD verdict does not exist without a source — the eject
+        // gate IS the verdict): rc=2, the eject is never attempted,
+        // and no ledger row is appended.
+        let (archive, _card, _rec) = mk_source_audit_dir("eject-nosource");
+        let base = archive.parent().unwrap().to_path_buf();
+        let fake = base.join("fake-eject.sh");
+        write_fake_eject(&fake);
+        let log = base.join("eject.log");
+        let (rc, verdict) = run_eject(&archive, None, &fake, &log, None);
+        assert_eq!(rc, ExitCode::from(2), "--eject without --source = the named rc 2 (a CARD verdict does not exist without a source)");
+        assert_eq!(verdict, None, "the usage-class refusal appends no ledger row");
+        assert!(!log.exists(), "the refusal never spawns the eject");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p8c9_audit_eject_failure_named_fail_rc1_and_ledger_card_ok_eject_fail() {
+        // The gating matrix's failure case (the eject command exits 1
+        // — e.g. the device is busy): the named EJECT FAIL line +
+        // rc=1 (the requested action did not happen — the operator
+        // must know) + the ledger's CARD_OK_EJECT_FAIL token (the
+        // eject WAS attempted — the fake records the mount point,
+        // then exits 1).
+        let (archive, card, _rec) = mk_source_audit_dir("eject-fail");
+        let base = archive.parent().unwrap().to_path_buf();
+        let fake = base.join("fake-eject.sh");
+        write_fake_eject(&fake);
+        let log = base.join("eject.log");
+        let (rc, verdict) = run_eject(&archive, Some(&card), &fake, &log, Some(1));
+        assert_eq!(rc, ExitCode::from(1), "the requested-but-failed eject = the named rc 1 (the requested action did not happen)");
+        assert_eq!(verdict.as_deref(), Some("CARD_OK_EJECT_FAIL"));
+        let recorded = std::fs::read_to_string(&log).unwrap_or_default();
+        assert_eq!(
+            recorded.trim(),
+            card.to_str().unwrap(),
+            "the fake WAS called with the mount point (then exited 1)"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     // R-INV: a sidecar-only dir WITHOUT ascmhl/ audits EXACTLY as
