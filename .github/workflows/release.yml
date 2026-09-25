@@ -285,5 +285,5 @@ jobs:
             FramePrism ${{ github.ref_name }} — the prebuilt binaries (built from the tagged commit).
 
             Platforms: macOS (arm64) · Linux (x86_64) · Windows (x86_64).
-            The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works anywhere.
+            The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
             Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).

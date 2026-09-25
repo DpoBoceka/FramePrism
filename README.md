@@ -26,6 +26,8 @@ verb and the auto-eject after a verified offload are not yet implemented.
 
 From the repository root:
 
+macOS (the gate toolchain — the committed prefix is the mac host's):
+
 ```sh
 cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the committed deps/.jpeg-prefix
 ./tool/target/release/frameprism --version             # frameprism 0.1.1
@@ -37,6 +39,15 @@ cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the comm
 # decode back (the round-trip is bit-exact):
 ./tool/target/release/frameprism decode clips/ decoded/
 ```
+
+Linux / Windows (the host prefix first — the committed one is a Darwin build):
+
+```sh
+deps/fetch.sh && deps/build-libjpeg.sh   # → deps/.jpeg-prefix (the host build)
+JPEG_TURBO_PREFIX=$PWD/deps/.jpeg-prefix cargo build --release --manifest-path tool/Cargo.toml
+```
+
+The full prefix contract (the opt-in paths, the named refusals): `CONTRIBUTING.md` (the Build section).
 
 No footage? The self-contained smoke gate + the committed 10-frame fixture:
 
@@ -50,7 +61,7 @@ downscale2x 17.12:1.
 
 ## Platforms and cameras
 
-- **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works anywhere.
+- **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works on all three platforms with the host-prefix setup (the Quick start).
 - **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
 - **Distribution:** the source (this repository) + the prebuilt release binaries (the Downloads). No `cargo install`, crates.io package, or Homebrew package.
 
@@ -58,7 +69,7 @@ downscale2x 17.12:1.
 
 Prebuilt binaries for macOS (arm64), Linux (x86_64) and Windows (x86_64) are on the release page (https://github.com/DpoBoceka/FramePrism/releases).
 Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
-The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works anywhere.
+The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
 
 ## CLI
 
