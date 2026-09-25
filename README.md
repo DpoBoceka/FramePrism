@@ -59,6 +59,7 @@ downscale2x 17.12:1.
 
 Prebuilt binaries for macOS (arm64), Linux (x86_64) and Windows (x86_64) are on the release page (https://github.com/DpoBoceka/FramePrism/releases).
 Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
+The downloaded binary is not marked executable — `chmod +x frameprism-*` after the download (macOS/Linux).
 The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
 
 ## CLI
