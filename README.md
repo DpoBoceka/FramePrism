@@ -54,6 +54,12 @@ downscale2x 17.12:1.
 - **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
 - **Distribution:** source-only (this repository). No `cargo install`, crates.io package, Homebrew package, or prebuilt release binary yet.
 
+## Downloads
+
+Prebuilt binaries for macOS (arm64), Linux (x86_64) and Windows (x86_64) are on the release page (https://github.com/DpoBoceka/FramePrism/releases).
+Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
+The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works anywhere.
+
 ## CLI
 
 `frameprism --help` is the single source of truth for the flag semantics (the design notes
