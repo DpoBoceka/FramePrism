@@ -62,9 +62,11 @@
 #   E8  NOTICE.md — verbatim third-party license text (legal boilerplate
 #       that cannot be edited; the rendered-surface tripwire already
 #       encodes this tolerance)
-#   E9  the GitHub Actions runner cache paths (~/.cargo/*) in
-#       .github/workflows/ci.yml — the runner's home, not a machine
-#       home
+#   E9  the GitHub Actions runner cache paths (~/.cargo/*) in the
+#       .github/workflows/ files — the runner's home, not a machine
+#       home (the scope is the workflow dir, the only place
+#       runner-home paths legitimately appear; any other file keeps
+#       the leak scan)
 #   E10 the gate's own pattern table (ci/check-oss-clean.sh — the
 #       scanner's family literals are the gate, not tree content)
 #   E11 the camera-named DNG capture dates in fixture/corpus file names
@@ -239,8 +241,10 @@ E6_LINE = re.compile(r"^[\s\d,;()\[\].+\-/]+$")
 E7_FILES = {"docs/security.md", "ci/pins.tsv"}
 # E8 — NOTICE.md (verbatim third-party license text).
 E8_FILE = "NOTICE.md"
-# E9 — the GitHub Actions runner cache paths.
-E9_FILE = ".github/workflows/ci.yml"
+# E9 — the GitHub Actions runner cache paths (the runner-home path
+# class, workflow-dir-scoped — the only place runner-home paths
+# legitimately appear; any other file keeps the leak scan).
+E9_PREFIX = ".github/workflows/"
 # E10 — the gate's own pattern table.
 E10_FILE = "ci/check-oss-clean.sh"
 # E11 — the camera-named DNG capture dates (the corpus/fixture file-name
@@ -337,7 +341,7 @@ for dirpath, dirnames, filenames in os.walk(repo):
                         e = "E6"
                     elif pname == "A/B" and rel in E7_FILES and "class" in line.lower():
                         e = "E7"
-                    elif pname == "home-path" and rel == E9_FILE and "~/." in line:
+                    elif pname == "home-path" and rel.startswith(E9_PREFIX) and "~/." in line:
                         e = "E9" if re.search(r"~/\.cargo", line) else None
                     elif pname == "home-path" and E12_HOME.search(line):
                         e = "E12"
