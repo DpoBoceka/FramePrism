@@ -16,11 +16,11 @@ What 0.1.0 ships:
 - **The verification chain** — sha256/crc32c checksum sidecars, the `--verify` round-trip, the byte-identity oracles re-encoded + byte-compared on every gate run.
 - **Subcommands** — `bake` (tar/ISO + manifest), `decode` (16-bit PAM frames), `derive` (8/10-bit working DNGs), `diff`, `sign`/`verify` (the signed reel manifest — docs/provenance.md).
 
-Known limits (0.1.0): source-only distribution (no prebuilt binary yet — the Quick start is the
-install); macOS Apple Silicon only (the gate toolchain); the MHL manifest's writer/parser is
-tested against the adversarial suite, round-trip with a third-party implementation not yet
-exercised; the card `wipe` verb and the auto-eject after a verified offload are not yet
-implemented.
+Known limits (0.1.0): the distribution is the source + the release-page binaries (the
+Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
+(the gate toolchain); the MHL manifest's writer/parser is tested against the adversarial
+suite, round-trip with a third-party implementation not yet exercised; the card `wipe`
+verb and the auto-eject after a verified offload are not yet implemented.
 
 ## Quick start
 
@@ -50,9 +50,9 @@ downscale2x 17.12:1.
 
 ## Platforms and cameras
 
-- **Platform:** macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80). Windows + Linux are source-portability targets without a contract build.
+- **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works anywhere.
 - **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
-- **Distribution:** source-only (this repository). No `cargo install`, crates.io package, Homebrew package, or prebuilt release binary yet.
+- **Distribution:** the source (this repository) + the prebuilt release binaries (the Downloads). No `cargo install`, crates.io package, or Homebrew package.
 
 ## Downloads
 
