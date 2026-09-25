@@ -27,8 +27,6 @@
 //! report consumers) + `parse_manifest_counts`. The
 //! `g2_distribution_gate_is_fatal` predicate (the VBR-only scoping).
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -1083,7 +1081,7 @@ fn collect(
     visited: &mut std::collections::HashSet<(u64, u64)>,
 ) -> Result<()> {
     let meta = std::fs::metadata(dir)?;
-    let id = (meta.dev(), meta.ino()); // unix: std::os::unix::fs::MetadataExt
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

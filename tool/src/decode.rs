@@ -70,9 +70,6 @@ use crate::jxl::{pam_header, reinterleave, PLANES};
 use crate::tiff::{self, IfdEntry, Meta};
 use crate::tileenc::{self, Grid};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The input codec for `frameprism decode` (cf. the encode `--codec`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Codec {
@@ -326,7 +323,7 @@ fn walk(
 ) -> Result<()> {
     let meta = std::fs::metadata(dir)
         .with_context(|| format!("read dir {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino());
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

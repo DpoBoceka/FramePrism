@@ -272,6 +272,34 @@ pub fn is_apple_double(name: &str) -> bool {
     name.starts_with("._")
 }
 
+/// The file-identity pair (the (dev, ino) cycle-guard key of the
+/// directory walks): unix — (device, inode), the strong identity;
+/// non-unix — (mtime nanos, file size), the std-only portable
+/// fallback (a compile-portability class: weaker discrimination,
+/// documented — the byte contract is the unix one).
+pub(crate) fn file_id(meta: &std::fs::Metadata) -> (u64, u64) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        (meta.dev(), meta.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        (
+            meta
+                .modified()
+                .map(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_nanos()
+                        as u64
+                })
+                .unwrap_or(0),
+            meta.len(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_apple_double;

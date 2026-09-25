@@ -28,7 +28,6 @@
 //! encode-time gate is the verdict's authority, the line is the
 //! record's echo).
 
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -196,7 +195,7 @@ fn collect_members(base: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
         visited: &mut std::collections::HashSet<(u64, u64)>,
     ) -> std::io::Result<()> {
         let meta = std::fs::metadata(dir)?;
-        let id = (meta.dev(), meta.ino());
+        let id = crate::file_id(&meta);
         if !visited.insert(id) {
             return Ok(()); // the cycle guard (the collect parity)
         }

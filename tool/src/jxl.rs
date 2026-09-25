@@ -811,9 +811,6 @@ struct SidecarRow {
 // refusal, (dev,ino) cycle guard, non-DNG sidecars)
 // ---------------------------------------------------------------------------
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 fn collect(
     base: &Path,
     dir: &Path,
@@ -823,7 +820,7 @@ fn collect(
     visited: &mut HashSet<(u64, u64)>,
 ) -> Result<()> {
     let meta = std::fs::metadata(dir)?;
-    let id = (meta.dev(), meta.ino());
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

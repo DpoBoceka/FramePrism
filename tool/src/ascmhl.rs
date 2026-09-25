@@ -174,9 +174,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The history's directory name (the spec's 5.3.1: the `ascmhl`
 /// directory at the scope's top level — the mandatory ignore default
 /// #2).
@@ -1256,7 +1253,7 @@ fn walk_with(
 ) -> Result<DirNode> {
     let meta = std::fs::metadata(dir)
         .with_context(|| format!("stat the ascmhl scope {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino()); // unix: std::os::unix::fs::MetadataExt
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         bail!("the ascmhl scope walk hit a directory cycle at {}", dir.display());
     }

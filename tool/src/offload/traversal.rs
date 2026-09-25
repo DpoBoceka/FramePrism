@@ -9,9 +9,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The `--to` startup probe: the dest must exist
 /// (created) and be WRITABLE before any frame — a named refusal (the
 /// caller turns the `Err` into rc=2, before the gate + the encode).
@@ -52,7 +49,7 @@ fn collect_all_walk(
 ) -> Result<()> {
     let meta = std::fs::metadata(dir)
         .with_context(|| format!("read dir {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino()); // unix: std::os::unix::fs::MetadataExt
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

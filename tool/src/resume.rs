@@ -127,12 +127,6 @@ pub fn clean_temp_files(output: &Path) -> Vec<String> {
     removed
 }
 
-fn file_id(p: &Path) -> Option<(u64, u64)> {
-    use std::os::unix::fs::MetadataExt;
-    let m = std::fs::metadata(p).ok()?;
-    Some((m.dev(), m.ino()))
-}
-
 fn is_temp_name(name: &str) -> bool {
     if name.starts_with('.') && name.ends_with(".ingest-manifest.tsv.tmp") {
         return true;
@@ -151,9 +145,10 @@ fn clean_temp_dir(
     removed: &mut Vec<String>,
     visited: &mut HashSet<(u64, u64)>,
 ) {
-    let Some(id) = file_id(dir) else {
+    let Some(meta) = std::fs::metadata(dir).ok() else {
         return;
     };
+    let id = crate::file_id(&meta);
     if !visited.insert(id) {
         return;
     }

@@ -17,8 +17,6 @@
 //! it) + `collect_dng_frames` (the discovery read — the audit frame
 //! re-derivation, the Apple-double shadow skip).
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -453,7 +451,7 @@ pub fn collect_dng_frames(root: &Path) -> Result<Vec<PathBuf>, String> {
     while let Some(dir) = stack.pop() {
         let meta = std::fs::metadata(&dir)
             .map_err(|err| format!("read dir {}: {err}", dir.display()))?;
-        let id = (meta.dev(), meta.ino());
+        let id = crate::file_id(&meta);
         if !visited.insert(id) {
             continue;
         }
