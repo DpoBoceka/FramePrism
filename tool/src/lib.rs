@@ -359,13 +359,17 @@ mod tests {
     }
 
     /// The cycle-guard identity property (the collision class): two
-    /// DISTINCT directories forced to identical (mtime, size) — the
-    /// same instant (std-only `File::set_modified`) + the same shape
-    /// (one empty file each — the same directory size on the mount)
-    /// — must carry DIFFERENT identities. The pre-existing non-unix
-    /// (mtime, size) key returns the SAME value here (the collision);
-    /// the platform identity (the unix dev/ino, the windows canonical
-    /// path) cannot.
+    /// DISTINCT directories with the forced (mtime, size) collision —
+    /// the same instant (the unix form: the std-only `File::set_modified`
+    /// on the dir — the std-only open of a directory on windows is a
+    /// named ACCESS_DENIED, so the mtime forcing is unix-only) + the
+    /// same shape (one empty file each — the same directory size on
+    /// the mount — the premise asserted on every platform) — must
+    /// carry DIFFERENT identities. The pre-existing non-unix (mtime,
+    /// size) key returns the SAME value on the forced pair (the
+    /// collision); the platform identity (the unix dev/ino, the
+    /// windows canonical path) cannot — the windows assertion is the
+    /// property form, executed where the pre-existing weak pair ran.
     #[test]
     fn cycle_guard_identity_rejects_the_forced_mtime_size_collision() {
         let root = std::env::temp_dir()
@@ -376,23 +380,30 @@ mod tests {
         std::fs::create_dir_all(&d_a).unwrap();
         std::fs::create_dir_all(&d_b).unwrap();
         // The same shape: one empty file each (the size half of the
-        // forced pair — the same directory size on the mount).
+        // collision — the same directory size on the mount).
         std::fs::write(d_a.join("x.bin"), b"").unwrap();
         std::fs::write(d_b.join("x.bin"), b"").unwrap();
-        // The mtime half: the same instant on both dirs (std-only).
-        let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
-        for d in [&d_a, &d_b] {
-            std::fs::OpenOptions::new()
-                .read(true)
-                .open(d)
-                .unwrap()
-                .set_modified(instant)
-                .unwrap();
+        // The mtime half: the same instant on both dirs — the unix
+        // form (the windows std open of a directory is the named
+        // ACCESS_DENIED — code 5 — so the forcing is unix-only; the
+        // property assertion below is the windows form).
+        #[cfg(unix)]
+        {
+            let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+            for d in [&d_a, &d_b] {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(d)
+                    .unwrap()
+                    .set_modified(instant)
+                    .unwrap();
+            }
         }
         let m_a = std::fs::metadata(&d_a).unwrap();
         let m_b = std::fs::metadata(&d_b).unwrap();
         // The premise (the collision is real on this mount): the
         // exact pair the pre-existing weak key keyed on is identical.
+        #[cfg(unix)]
         assert_eq!(
             m_a.modified().unwrap(),
             m_b.modified().unwrap(),
@@ -413,8 +424,10 @@ mod tests {
     }
 
     /// The cycle-guard walker behavior (the skip / false-cycle
-    /// class): the temp tree — the root + two subdirs forced to the
-    /// same (mtime, size) + the symlink cycle back into the root
+    /// class): the temp tree — the root + two subdirs with the forced
+    /// (mtime, size) collision (the unix form — the mtime forcing is
+    /// unix-only: the windows std open of a directory is the named
+    /// ACCESS_DENIED) + the symlink cycle back into the root
     /// (best-effort — the host's symlink policy decides; the
     /// assertion holds either way) — walked by the actual
     /// cycle-guard walker (`offload::traversal::collect_all_files`):
@@ -434,15 +447,19 @@ mod tests {
         std::fs::write(a.join("a1.bin"), b"x").unwrap();
         std::fs::write(b.join("b1.bin"), b"y").unwrap();
         // Force the collision on both subdirs (the same instant, the
-        // same one-file shape).
-        let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
-        for d in [&a, &b] {
-            std::fs::OpenOptions::new()
-                .read(true)
-                .open(d)
-                .unwrap()
-                .set_modified(instant)
-                .unwrap();
+        // same one-file shape) — the unix form (the walker assertion
+        // below is the portable form — every platform).
+        #[cfg(unix)]
+        {
+            let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+            for d in [&a, &b] {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(d)
+                    .unwrap()
+                    .set_modified(instant)
+                    .unwrap();
+            }
         }
         // The cycle: a symlink back into the root (best-effort — the
         // host's symlink policy; the walker's symlink refusal + the
