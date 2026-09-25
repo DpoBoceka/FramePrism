@@ -1,6 +1,6 @@
 [package]
 name = "frameprism"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.80"
 description = "A lossless, verifiable CinemaDNG archive tool with an integrated safe-offload workflow (camera card → drives → archive)"

@@ -943,7 +943,7 @@ mod tests {
             dest: "/out".into(),
             created: 1_758_000_000,
             job: utc_timestamp(1_758_000_000),
-            tool: "frameprism 0.1.0".into(),
+            tool: "frameprism 0.1.1".into(),
             total_files: 3,
             total_size: 42,
             run_seconds: 0.4,

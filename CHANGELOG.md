@@ -2,6 +2,13 @@
 
 All notable changes to frameprism.
 
+## 0.1.1
+
+- The Windows source-portability fix (the portable file identity + the cfg-gated permission branches) — the source compiles and the binary links on all three platforms, proven by CI.
+- The 3-OS release binaries: every PR and main push builds them as Actions artifacts; a `v*` tag publishes them (with `SHA256SUMS`) to the GitHub Release.
+- The release workflow's least-privilege permissions.
+- The README Downloads section.
+
 ## 0.1.0 — the initial release
 
 The initial release of the public tree. The pinned test corpus (the
