@@ -73,7 +73,7 @@ jobs:
           toolchain: "1.98"
 
       - name: Cache the cargo registry (additive — the download cache)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -82,7 +82,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
@@ -134,7 +134,7 @@ jobs:
           toolchain: "1.98"
 
       - name: Cache the cargo registry (additive — the download cache)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -143,7 +143,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
@@ -193,7 +193,7 @@ jobs:
           toolchain: "1.98"
 
       - name: Cache the cargo registry (additive — the download cache)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -202,7 +202,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
