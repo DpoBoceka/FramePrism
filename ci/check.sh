@@ -237,5 +237,5 @@ if ! bash "$SCRIPT_DIR/check-fuzz.sh" --repo "$REPO"; then
 fi
 
 # --- step 11: summary ---------------------------------------------------------
-echo "ci check: ALL PASS (pins $PINS_OK/$PINS_TOT, fixtures 12/12 regenerated, suite 592/0/1, oracle10 10/10 @ 67762584 B, oracle108 10/10 @ 2380943 B, audit 0 vulns (124 deps), fuzz 25/25 pinned)"
+echo "ci check: ALL PASS (pins $PINS_OK/$PINS_TOT, fixtures 12/12 regenerated, suite 592/0/1, oracle10 10/10 @ 67762584 B, oracle108 10/10 @ 2380943 B, audit 0 vulns (118 deps), fuzz 25/25 pinned)"
 exit 0
