@@ -54,7 +54,12 @@
 #     refresh, a changed fixture, a rebuilt prefix) is a named FAIL.
 #   - probed-by-check.sh: recorded expectation, asserted by check.sh
 #     itself (the suite gate line / the oracle total / the pinned fuzz
-#     outcome line) — OK by record, never a silent skip.
+#     outcome line) — the rows whose expected check.sh asserts as a
+#     literal (suite, oracle10) are cross-checked against check.sh's
+#     gating lines (a drift = a named FAIL — the two authorities
+#     cannot silently diverge); the delegated rows (oracle108,
+#     fuzz-outcome, jxl-oxide — check-108.sh / check-fuzz.sh /
+#     check-xcheck.sh) are OK by record, never a silent skip.
 # A missing binary is a named FAIL (the pin cannot be verified).
 # No network. Exit: 0 all OK, 1 any FAIL (every FAIL named).
 #
@@ -304,8 +309,24 @@ while IFS=$'\t' read -r component expected probe note; do
   fi
 
   if [ "$probe_type" = "probed-by-check.sh" ]; then
-    echo "PIN OK $component :: recorded — probed by check.sh ($note)"
-    ok=$((ok+1))
+    # Cross-check: a row check.sh asserts as a literal (suite /
+    # oracle10 — the gating lines are the authority) must equal it,
+    # so the row and the gate cannot silently diverge (before this
+    # the branch trusted the row unconditionally); the rows whose
+    # gate is delegated (oracle108 / fuzz-outcome / jxl-oxide) stay
+    # record-only. Mismatch = a named FAIL (row, recorded, check.sh).
+    case "$component" in
+      suite)    cv="$(grep -oE '[0-9]+ passed; [0-9]+ failed; [0-9]+ ignored' "$SCRIPT_DIR/check.sh" | head -1)" ;;
+      oracle10) cv="$(sed -n 's/.*"\$tot" -ne \([0-9]*\).*$/\1/p' "$SCRIPT_DIR/check.sh" | head -1)" ;;
+      *) cv="-" ;;
+    esac
+    if [ "$cv" = "-" ]; then
+      echo "PIN OK $component :: recorded — probed by check.sh ($note)"; ok=$((ok+1))
+    elif [ "$cv" = "$expected" ]; then
+      echo "PIN OK $component :: recorded — cross-checked against check.sh ($cv)"; ok=$((ok+1))
+    else
+      echo "PIN FAIL $component :: expected $expected, got (check.sh gate literal) ${cv:-'(gate literal not found in check.sh)'}"; fail=$((fail+1))
+    fi
     continue
   fi
 
