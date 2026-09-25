@@ -548,6 +548,7 @@ mod tests {
         assert!(line.contains("306 ms/frame"), "{line:?}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn scan_source_counts_only_the_worker_frames() {
         let tmp = std::env::temp_dir().join("frameprism_preflight_scan_test");

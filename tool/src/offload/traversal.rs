@@ -553,6 +553,7 @@ mod tests {
     /// `offload_core_multi` (the funnel for every offload form —
     /// the per-command wiring is proven by the existing offload
     /// batteries).
+    #[cfg(unix)]
     #[test]
     fn offload_planted_intermediate_dir_symlink_refused() {
         let base = std::env::temp_dir().join(format!(
@@ -623,6 +624,7 @@ mod tests {
     /// acceptance proof). The alias is self-contained (the test
     /// creates its own link — the macOS `/tmp` → `/private/tmp`
     /// class is environment-dependent).
+    #[cfg(unix)]
     #[test]
     fn offload_volume_alias_accepted() {
         let base = std::env::temp_dir().join(format!(

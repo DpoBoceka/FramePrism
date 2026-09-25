@@ -1194,6 +1194,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn openssl_probe_classifies_the_failed_operation() {
         // The helper's CLASSIFICATION, not the environment: a fake
