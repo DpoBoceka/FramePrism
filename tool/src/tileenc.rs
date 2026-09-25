@@ -1954,14 +1954,15 @@ mod tests {
             .collect()
     }
 
-    /// Reference-parity acceptance: the adaptive encoder
-    /// (3 candidates {wrapped PSV7, wrapped PSV2, natural PSV1}, the
-    /// histogram-pass expected-bit-count key wins, see
-    /// `encode_tile_candidates`) must reproduce the reference golden tiles
-    /// BYTE-IDENTICALLY on sample frames — f1 (the 64/64 measurement),
-    /// f113 (middle) and f225 (last). A byte-identical tile implies the
-    /// same (Ss, orientation) choice, the same per-component Huffman fits
-    /// AND the same tie-break, so this gates the whole reference contract.
+    /// Reference-parity measurement (the interop oracle + benchmark — NOT
+    /// the acceptance): the adaptive encoder (3 candidates {wrapped PSV7,
+    /// wrapped PSV2, natural PSV1}, the histogram-pass expected-bit-count
+    /// key wins, see `encode_tile_candidates`) reproduces the reference
+    /// golden tiles byte-identically on sample frames — f1 (the 64/64
+    /// measurement), f113 (middle) and f225 (last). A byte-identical tile
+    /// implies the same (Ss, orientation) choice, the same per-component
+    /// Huffman fits AND the same tie-break — the measured byte-identity
+    /// evidence; the round-trip + structure + NLE carry the acceptance.
     #[test]
     fn real_a001_sample_frames_tiled_byte_identical_to_golden() {
         let gdir = "../testdata/reference/lossless";
