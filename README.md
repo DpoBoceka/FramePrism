@@ -6,16 +6,6 @@ pipeline. The default output is **j92** — a DNG container carrying lossless JP
 (the 21.1-generation measurement). Two working modes ride the same contract: `--mode log10` (10-bit log codes)
 and `--downscale2x` (a 2× downscale — ~10:1 for proxies).
 
-What 0.1.1 ships:
-
-- **The j92 working tier** — lossless, NLE-compatible (the output plays in DaVinci Resolve 21.1).
-- **The modes** — `log10` + `downscale2x`, at the measured camera gates.
-- **The jxl archival tier** — `--codec jxl`: 4 sub-plane `.jxl` files per frame + the checksum sidecar (the archival format — not an NLE container).
-- **`--fast`** — bit-exact single-candidate selection, ~3–4.6× faster than the adaptive 3-candidate selection.
-- **The card workflow** — `offload` (mirror + verify any card tree, N×M fan-out), `audit`, `restore`, `repair`, `ledger` (the verify-before-wipe verdict — docs/card-workflow.md).
-- **The verification chain** — sha256/crc32c checksum sidecars, the `--verify` round-trip, the byte-identity oracles re-encoded + byte-compared on every gate run.
-- **Subcommands** — `bake` (tar/ISO + manifest), `decode` (16-bit PAM frames), `derive` (8/10-bit working DNGs), `diff`, `sign`/`verify` (the signed reel manifest — docs/provenance.md).
-
 Known limits (0.1.1): the distribution is the source + the release-page binaries (the
 Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
 (the gate toolchain); the MHL manifest's writer/parser is tested against the adversarial
