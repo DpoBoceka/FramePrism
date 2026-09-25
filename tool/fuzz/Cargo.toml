@@ -1,0 +1,25 @@
+[package]
+name = "frameprism-fuzz"
+description = "Fuzz targets for frameprism (cargo-fuzz)"
+authors = ["Maksim"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+frameprism = { path = ".." }
+
+[dependencies.libfuzzer-sys]
+version = "0.4"
+
+[[bin]]
+name = "tiff_parse"
+path = "fuzz_targets/tiff_parse.rs"
+harness = false
+
+[[bin]]
+name = "mhl_parse"
+path = "fuzz_targets/mhl_parse.rs"
+harness = false

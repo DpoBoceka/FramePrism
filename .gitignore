@@ -1,0 +1,52 @@
+# vendored dependency source — re-fetch with deps/fetch.sh
+deps/*
+!deps/README.md
+!deps/fetch.sh
+!deps/build-libjpeg.sh
+!deps/build-libjxl.sh
+!deps/libjpeg-percomp-lossless.patch
+# the pinned encoder binaries (the jxl byte-identity contract —
+# committed so the pin is self-contained; see ci/pins.tsv)
+!deps/pinned-binaries/
+!deps/pinned-binaries/cjxl
+!deps/pinned-binaries/djxl
+# the pinned dependency-audit binary (the security pin —
+# committed so the offline audit pin is self-contained; ci/pins.tsv)
+!deps/pinned-binaries/cargo-audit
+# the pinned rustsec/advisory-db snapshot (the security pin —
+# committed so the offline audit is self-contained; ci/pins.tsv)
+!deps/rustsec-advisory-db/
+# the patched turbojpeg prefix the byte contract links (the contract's
+# build input — the contract never links the Homebrew build; source
+# pinned in deps/fetch.sh; pins `turbojpeg` + `turbojpeg-prefix` in
+# ci/pins.tsv; Homebrew only for the pinned tools xorriso/zstd/tar +
+# the build.rs dev fallback). `!deps/.jpeg-prefix/` lets git descend
+# into the dir (the parent is excluded by `deps/*` — git cannot
+# re-include paths inside an excluded directory); bin/ + share/ (the
+# build install outputs, deliberately out of the contract surface)
+# stay excluded.
+!deps/.jpeg-prefix/
+!deps/.jpeg-prefix/lib/
+!deps/.jpeg-prefix/include/
+deps/.jpeg-prefix/bin/
+deps/.jpeg-prefix/share/
+# the pinned cjxl/djxl binaries' runtime dylib home (the jxl byte
+# contract's runtime dependency — committed so the pin is
+# self-contained: deps/.jxl-libs/{libjxl,libjxl_threads,libjxl_cms}.
+# 0.12.dylib, the exact @rpath names the pinned binaries reference;
+# resolution = DYLD_FALLBACK_LIBRARY_PATH, the named export line in
+# ci/check-pins.sh + ci/check-108.sh; provenance + recipe:
+# deps/README.md + deps/build-libjxl.sh; pin: ci/pins.tsv `jxl-libs`)
+!deps/.jxl-libs/
+!deps/.jxl-libs/*.dylib
+
+# real-footage reference set (large, re-recordable) — see testdata/README.md
+testdata/*
+!testdata/README.md
+!testdata/manifest.tsv
+!testdata/clips.tsv
+.DS_Store
+
+# cargo build output (the gate's target dir — never committed; the
+# fresh-clone skeleton gate exposed the missing pattern)
+target/

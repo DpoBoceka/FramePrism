@@ -1,0 +1,51 @@
+diff --git a/src/jcmarker.c b/src/jcmarker.c
+index a064d4d..120ff75 100644
+--- a/src/jcmarker.c
++++ b/src/jcmarker.c
+@@ -338,7 +338,13 @@ emit_sos(j_compress_ptr cinfo)
+      */
+ 
+     /* DC needs no table for refinement scan */
+-    td = cinfo->Ss == 0 && cinfo->Ah == 0 ? compptr->dc_tbl_no : 0;
++    /* In lossless mode Ss = PSV (nonzero) yet the DC table is still
++     * selected by dc_tbl_no (lossless uses DC tables only), so take the
++     * selector from dc_tbl_no there too (the reference encoder's per-component tables).
++     * Without this, emit_sos would write (0,0),(0,0) for any table
++     * assignment and decoders would read component 1 with table 0. */
++    td = (cinfo->master->lossless ||
++          (cinfo->Ss == 0 && cinfo->Ah == 0)) ? compptr->dc_tbl_no : 0;
+     /* AC needs no table when not present */
+     ta = cinfo->Se ? compptr->ac_tbl_no : 0;
+ 
+diff --git a/src/jcmaster.c b/src/jcmaster.c
+index ca156fb..0bb0e41 100644
+--- a/src/jcmaster.c
++++ b/src/jcmaster.c
+@@ -753,13 +753,26 @@ jinit_c_master_control(j_compress_ptr cinfo, boolean transcode_only)
+   if (cinfo->master->lossless) {
+     int ci;
+     jpeg_component_info *compptr;
++    int save_dc_tbl[MAX_COMPONENTS];
++
++    /* Preserve per-component lossless table numbers across the
++     * re-default: jpeg_default_colorspace() reinitializes comp_info
++     * (dc/ac_tbl_no = 0), which would discard an application's
++     * per-component lossless table assignment (e.g. the reference encoder's
++     * two-DC-table tiles: comp 0 → table 0, comp 1 → table 1).
++     * The values are read on the following prepare_for_pass() when the
++     * Huffman gather pass binds the per-sample count tables. */
++    for (ci = 0; ci < cinfo->num_components; ci++)
++      save_dc_tbl[ci] = cinfo->comp_info[ci].dc_tbl_no;
+ 
+     cinfo->raw_data_in = FALSE;
+     cinfo->smoothing_factor = 0;
+     jpeg_default_colorspace(cinfo);
+     for (ci = 0, compptr = cinfo->comp_info; ci < cinfo->num_components;
+-         ci++, compptr++)
++         ci++, compptr++) {
+       compptr->h_samp_factor = compptr->v_samp_factor = 1;
++      compptr->dc_tbl_no = save_dc_tbl[ci];
++    }
+   }
+ #endif
+ 

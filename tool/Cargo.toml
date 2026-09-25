@@ -1,0 +1,72 @@
+[package]
+name = "frameprism"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "A lossless, verifiable CinemaDNG archive tool with an integrated safe-offload workflow (camera card → drives → archive)"
+license = "MIT"
+repository = "https://github.com/DpoBoceka/frameprism"
+homepage = "https://github.com/DpoBoceka/frameprism"
+publish = false
+
+[lib]
+name = "frameprism"
+path = "src/lib.rs"
+# The module docs contain indented pseudo-code (not Rust); there are no
+# real doctests in this crate.
+doctest = false
+
+[[bin]]
+name = "frameprism"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+ed25519-dalek = "2"
+md5 = "0.7"
+rayon = "1"
+tar = { version = "0.4.46", default-features = false }
+thiserror = "2"
+zstd = "0.14.0"
+# The in-process ISO9660 writer for `bake --iso` ( — the xorriso
+# subprocess is retired): the EXACT version pin (the contract-build
+# posture — the crate version is a byte-shape input, the zstd/tar row
+# class). `default-features = false, features = ["iso9660"]`: the
+# filesystem feature only (std rides with it — no CLI / archive / codec
+# surface). The version the binary embeds is read from the committed
+# Cargo.lock by build.rs (the `FRAMEPRISM_FSTOOL_CRATE_VERSION` env —
+# the pin rows assert their expected against it).
+fstool = { version = "=0.4.33", default-features = false, features = ["iso9660"] }
+
+# Native FFI (libjpeg-turbo TurboJPEG API) is wired in milestone 1.
+# The scaffold deliberately links nothing native so `cargo check` works
+# anywhere. See src/codec.rs.
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "encode"
+harness = false
+
+[lints.clippy]
+# The lint baseline: the enforced contract = clippy's STABLE
+# default warn set MINUS the allows below, gated by ci/check.sh step 3
+# (`cargo clippy --workspace -- -D warnings`, the [lints]-driven run).
+# Every allow carries its reason IN THE COMMENT (the project rule).
+#
+# too_many_arguments (ALLOW — the kernel allow): the
+# performance-sensitive encoder kernels (the fastenc Huffman/PSV loops,
+# the tileenc tile loop) + the CLI/report surface (main.rs, worker.rs,
+# report.rs, bake.rs) keep the hand-tuned FLAT signatures (8-19 args) —
+# the established style of the measured kernels; the clippy pattern
+# (the param-struct alternative) is the considered alternative,
+# REJECTED as a churn-level API refactor: every call site + the
+# structural-pinned signature text would move in a byte-invariance work,
+# buying nothing the flat form does not already give. Re-review if the
+# flat-signature style changes.
+too_many_arguments = "allow"

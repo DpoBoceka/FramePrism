@@ -1,0 +1,177 @@
+# The CI gate: the macos-latest job running the make surface's thin
+# dispatch to ci/check.sh (the single source of gate truth) + two
+# source-portability CHECK jobs (check-linux / check-windows — cargo
+# check only, NOT the contract build — the honesty pin is in their
+# headers).
+#
+# The contract build is macOS-only (the committed patched prefix is
+# the Darwin build), so the job runs on macos-latest. No Homebrew
+# install on the runner: the in-process container components
+# (zstd/tar) + the ISO writer (fstool) ride the committed Cargo.lock,
+# and the build inputs are committed with the repo, so no setup step
+# is needed beyond the toolchain.
+#
+# Hardening (the publication review): least-privilege
+# permissions (the job needs ONLY read access to the checkout — the
+# workflow uses NO secrets, so fork pull requests run the full gate
+# too: the deliberate decision — the gate is public-facing evidence,
+# not a secret holder), a wall-clock timeout, and the action pins at
+# commit SHAs (the tag is named in the comment — a tag move cannot
+# silently change what runs).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tool/**
+      - ci/**
+      - deps/**
+      - testdata/**
+      - profiles/**
+      - docs/**
+      - README.md
+      - CONTRIBUTING.md
+      - CHANGELOG.md
+      - NOTICE.md
+      - LICENSE
+      - Makefile
+      - .github/**
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - tool/**
+      - ci/**
+      - deps/**
+      - testdata/**
+      - profiles/**
+      - docs/**
+      - README.md
+      - CONTRIBUTING.md
+      - CHANGELOG.md
+      - NOTICE.md
+      - LICENSE
+      - Makefile
+      - .github/**
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write   # the actions/cache service API (write covers the restore lookup + the save — warn-only; never written on fork PRs — the service + the fork token policy)
+
+jobs:
+  check:
+    # The two cargo cache steps are ADDITIVE (wall-clock only — the
+    # gate's behavior is byte-identical): the registry is a pure
+    # content-addressed download cache, and a restored target cache
+    # cannot silently move the byte contract — the gate's oracle
+    # byte-compare re-proves it on every run (it stays in ci/check.sh,
+    # which this surface does not touch). The target key is
+    # toolchain-bound (1.98 is IN the key — rustc artifacts are
+    # toolchain-bound, so a toolchain bump invalidates the cache).
+    name: make check (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+          components: clippy  # the gate's clippy baseline step (the action's minimal profile lacks it)
+
+      - name: Run the ship gate
+        run: make check
+
+  check-linux:
+    # The source-portability CHECK (cargo check only — the contract
+    # build is the macos-latest job against the committed Darwin
+    # prefix; a green check job does NOT mean a Linux binary is a
+    # supported build). Evidences the README's fact that Linux remains
+    # a source-portability target without a contract build. `--locked`
+    # keeps the committed Cargo.lock authoritative (a drift is a named
+    # FAIL, not a silent re-resolve). The run step is from the manifest
+    # root (tool/ — the repo root has no Cargo.toml).
+    name: cargo check --locked (ubuntu-latest — source-portability CHECK only, not a contract build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Source-portability check (NOT the contract build)
+        run: |
+          cd tool
+          cargo check --locked
+
+  check-windows:
+    # The source-portability CHECK (cargo check only — the contract
+    # build is the macos-latest job against the committed Darwin
+    # prefix; a green check job does NOT mean a Windows binary is a
+    # supported build). Evidences the README's fact that Windows
+    # remains a source-portability target without a contract build.
+    # `--locked` keeps the committed Cargo.lock authoritative (a drift
+    # is a named FAIL, not a silent re-resolve). The run step is from
+    # the manifest root (tool/ — the repo root has no Cargo.toml).
+    name: cargo check --locked (windows-latest — source-portability CHECK only, not a contract build)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Source-portability check (NOT the contract build)
+        run: |
+          cd tool
+          cargo check --locked

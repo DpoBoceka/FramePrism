@@ -1,0 +1,18 @@
+[package]
+name = "jxl-xcheck"
+version = "0.1.0"
+edition = "2021"
+publish = false
+# The JXL independent-decoder cross-check harness: a SEPARATE
+# crate (NOT part of the tool's dep tree — the tool's audit baseline is
+# untouched) that depends on the tool via a path dependency (the public
+# lib API + CLI are used as-is; the dependency flows this way ONLY —
+# never the reverse). jxl-oxide = the independent pure-Rust JXL
+# decoder (default-features = false skips the rayon pull — the 8 small
+# grayscale planes decode fine serial). The committed Cargo.lock is the
+# pin the harness asserts before any decode (and the ci/pins.tsv row).
+
+[dependencies]
+anyhow = "1"
+frameprism = { path = "../../tool" }
+jxl-oxide = { version = "=0.12.6", default-features = false }

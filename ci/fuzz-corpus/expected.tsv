@@ -1,0 +1,25 @@
+a1-sof3-dht-sos-garbage	refused
+a10-bps10	refused
+a11-no-273	refused
+a12-no-photometric	refused
+a2-trunc10	refused
+a3-all-0xff	refused
+a4-all-zero	refused
+a5-soi-only	refused
+a6-zero-len	refused
+a7-len-past-eof	refused
+a8-len-short	refused
+a9-huge-wh	refused
+b1-tile0-bitflip	ok	16735112
+b2-trunc95	refused
+b3-trunc10	refused
+b4-tilelen-plus1000	refused
+b5-tilewidth-481	refused
+b6-tile0-rng	refused
+b7-bad-magic	refused
+b8-ifd-truncated	refused
+c1-random-bytes	refused
+c2-ifd-past-eof	refused
+c3-ifd-count-huge	refused
+c4-unknown-type	refused
+c5-be-magic-le	refused
