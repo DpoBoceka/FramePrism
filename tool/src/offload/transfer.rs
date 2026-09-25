@@ -1340,6 +1340,7 @@ mod tests {
     /// `to1 == to2` → rc=2 named, zero writes (the fan-out refuses
     /// the duplicate — it does not silently dedupe it); the
     /// canonicalized-path equality catches the symlinked alias too.
+    #[cfg(unix)]
     #[test]
     fn fanout_duplicate_dest_refused_zero_writes() {
         profile_override_a001();

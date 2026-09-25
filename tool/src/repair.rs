@@ -1557,6 +1557,7 @@ mod tests {
     /// re-read). FINAL component only — the link is
     /// at the row path (by definition planted: the offload walker
     /// never emits a symlink entry into the dest tree).
+    #[cfg(unix)]
     #[test]
     fn repair_refuses_symlinked_dest_row_outside_target_unchanged() {
         let (base, input, output, dest) = setup("sym-dest");
@@ -1605,6 +1606,7 @@ mod tests {
     /// refusal is the named class, not the io error — + without the
     /// guard the `fs::copy` would CREATE the target through the
     /// dangling link: the no-create proof is the headline here).
+    #[cfg(unix)]
     #[test]
     fn repair_refuses_dangling_symlinked_dest_row() {
         let (base, input, output, dest) = setup("sym-dangling");
@@ -1641,6 +1643,7 @@ mod tests {
     /// the manifest itself is untouched (no write, no rename — the
     /// rename-replaces class never runs) + the named error (the rc=2
     /// class rides the run()'s `error: repair (rewrite …): {err}`).
+    #[cfg(unix)]
     #[test]
     fn rewrite_manifest_refuses_planted_tmp_symlink() {
         let (base, input, output, dest) = setup("sym-tmp");
@@ -1687,6 +1690,7 @@ mod tests {
     /// the write; the write follows the link) + the named error (the
     /// rc=2 class rides the run()'s `error: repair (run report):
     /// {err}`).
+    #[cfg(unix)]
     #[test]
     fn reemit_run_report_refuses_planted_report_symlink() {
         let (base, input, output, dest) = setup("sym-report");
@@ -1740,6 +1744,7 @@ mod tests {
     /// BEFORE the copy (the named class) + the OUTSIDE dir UNTOUCHED
     /// (the byte-identity proof) + the rows stay dirty + named (the
     /// Err arm). The leaf guard stays UNTOUCHED.
+    #[cfg(unix)]
     #[test]
     fn repair_planted_intermediate_dir_symlink_refused() {
         let (base, input, output, dest) = setup("root-boundary");

@@ -6,29 +6,21 @@ pipeline. The default output is **j92** — a DNG container carrying lossless JP
 (the 21.1-generation measurement). Two working modes ride the same contract: `--mode log10` (10-bit log codes)
 and `--downscale2x` (a 2× downscale — ~10:1 for proxies).
 
-What 0.1.0 ships:
-
-- **The j92 working tier** — lossless, NLE-compatible (the output plays in DaVinci Resolve 21.1).
-- **The modes** — `log10` + `downscale2x`, at the measured camera gates.
-- **The jxl archival tier** — `--codec jxl`: 4 sub-plane `.jxl` files per frame + the checksum sidecar (the archival format — not an NLE container).
-- **`--fast`** — bit-exact single-candidate selection, ~3–4.6× faster than the adaptive 3-candidate selection.
-- **The card workflow** — `offload` (mirror + verify any card tree, N×M fan-out), `audit`, `restore`, `repair`, `ledger` (the verify-before-wipe verdict — docs/card-workflow.md).
-- **The verification chain** — sha256/crc32c checksum sidecars, the `--verify` round-trip, the byte-identity oracles re-encoded + byte-compared on every gate run.
-- **Subcommands** — `bake` (tar/ISO + manifest), `decode` (16-bit PAM frames), `derive` (8/10-bit working DNGs), `diff`, `sign`/`verify` (the signed reel manifest — docs/provenance.md).
-
-Known limits (0.1.0): source-only distribution (no prebuilt binary yet — the Quick start is the
-install); macOS Apple Silicon only (the gate toolchain); the MHL manifest's writer/parser is
-tested against the adversarial suite, round-trip with a third-party implementation not yet
-exercised; the card `wipe` verb and the auto-eject after a verified offload are not yet
-implemented.
+Known limits (0.1.1): the distribution is the source + the release-page binaries (the
+Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
+(the gate toolchain); the MHL manifest's writer/parser is tested against the adversarial
+suite, round-trip with a third-party implementation not yet exercised; the card `wipe`
+verb and the auto-eject after a verified offload are not yet implemented.
 
 ## Quick start
 
 From the repository root:
 
+macOS (the gate toolchain — the committed prefix is the mac host's):
+
 ```sh
 cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the committed deps/.jpeg-prefix
-./tool/target/release/frameprism --version             # frameprism 0.1.0
+./tool/target/release/frameprism --version             # frameprism 0.1.1
 
 # encode a clip (frames in → frames out; the run prints the summary:
 # the frame count, the bytes in/out, the ratio, the wall time):
@@ -37,6 +29,15 @@ cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the comm
 # decode back (the round-trip is bit-exact):
 ./tool/target/release/frameprism decode clips/ decoded/
 ```
+
+Linux / Windows (Git Bash — the host prefix first — the committed one is a Darwin build):
+
+```sh
+deps/fetch.sh && deps/build-libjpeg.sh   # → deps/.jpeg-prefix (the host build)
+JPEG_TURBO_PREFIX=$PWD/deps/.jpeg-prefix cargo build --release --manifest-path tool/Cargo.toml
+```
+
+The full prefix contract (the opt-in paths, the named refusals): `CONTRIBUTING.md` (the Build section).
 
 No footage? The self-contained smoke gate + the committed 10-frame fixture:
 
@@ -50,9 +51,15 @@ downscale2x 17.12:1.
 
 ## Platforms and cameras
 
-- **Platform:** macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80). Windows + Linux are source-portability targets without a contract build.
+- **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works on all three platforms with the host-prefix setup (the Quick start).
 - **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
-- **Distribution:** source-only (this repository). No `cargo install`, crates.io package, Homebrew package, or prebuilt release binary yet.
+- **Distribution:** the source (this repository) + the prebuilt release binaries (the Downloads). No `cargo install`, crates.io package, or Homebrew package.
+
+## Downloads
+
+Prebuilt binaries for macOS (arm64), Linux (x86_64) and Windows (x86_64) are on the release page (https://github.com/DpoBoceka/FramePrism/releases).
+Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
+The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
 
 ## CLI
 

@@ -272,6 +272,69 @@ pub fn is_apple_double(name: &str) -> bool {
     name.starts_with("._")
 }
 
+/// The directory identity of the cycle-guard visited sets — the
+/// platform-typed key (`Eq + Hash`; one variant per platform):
+/// - unix: `(dev, ino)` — the strong identity (the same values the
+///   pre-existing (dev, ino) pair emitted — the unix behavior is
+///   invariant).
+/// - windows: the canonical path — the exact identity (symlinks /
+///   junctions resolve; two distinct directories can never share a
+///   canonical path within a walk — the rename mid-walk is the only
+///   theoretical edge, out of class).
+/// - other: `(mtime nanos, size)` — the weak fallback, confined to
+///   the platforms where neither stable identity is available (none
+///   of the three CI targets).
+///
+/// Forward: the stable-std pair `MetadataExt::{volume_serial_number,
+/// file_index}` is feature-gated (`windows_by_handle`) on the pinned
+/// 1.98 (E0658 on the record) — when it stabilizes, the windows arm's
+/// swap to it is a one-branch change.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) enum DirId {
+    /// unix: the (device, inode) pair — the strong identity.
+    #[cfg(unix)]
+    DevIno(u64, u64),
+    /// windows: the canonical path — the exact identity.
+    #[cfg(windows)]
+    Canonical(std::path::PathBuf),
+    /// other: the (mtime nanos, size) pair — the weak fallback
+    /// (confined — none of the three CI targets).
+    #[cfg(not(any(unix, windows)))]
+    MtimeLen(u64, u64),
+}
+
+/// The directory identity for the `visited` cycle guard (the platform
+/// arm above): the metadata is taken internally — the caller passes
+/// the path. The error is the stat's (unix / other) or the
+/// canonicalize's (windows) — the site's pre-existing error wording
+/// carries it (the `with_context` / `map_err` at the call site).
+pub(crate) fn dir_id(path: &std::path::Path) -> std::io::Result<DirId> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = std::fs::metadata(path)?;
+        Ok(DirId::DevIno(meta.dev(), meta.ino()))
+    }
+    #[cfg(windows)]
+    {
+        Ok(DirId::Canonical(path.canonicalize()?))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let meta = std::fs::metadata(path)?;
+        let nanos = meta
+            .modified()
+            .map(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+                    as u64
+            })
+            .unwrap_or(0);
+        Ok(DirId::MtimeLen(nanos, meta.len()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_apple_double;
@@ -293,6 +356,132 @@ mod tests {
         assert!(is_apple_double("._CINEMA.ingest-manifest.tsv"));
         assert!(is_apple_double("._A001_001.members.tsv"));
         assert!(is_apple_double("._A001_001.part01.tar.zst.sha256"));
+    }
+
+    /// The cycle-guard identity property (the collision class): two
+    /// DISTINCT directories with the forced (mtime, size) collision —
+    /// the same instant (the unix form: the std-only `File::set_modified`
+    /// on the dir — the std-only open of a directory on windows is a
+    /// named ACCESS_DENIED, so the mtime forcing is unix-only) + the
+    /// same shape (one empty file each — the same directory size on
+    /// the mount — the premise asserted on every platform) — must
+    /// carry DIFFERENT identities. The pre-existing non-unix (mtime,
+    /// size) key returns the SAME value on the forced pair (the
+    /// collision); the platform identity (the unix dev/ino, the
+    /// windows canonical path) cannot — the windows assertion is the
+    /// property form, executed where the pre-existing weak pair ran.
+    #[test]
+    fn cycle_guard_identity_rejects_the_forced_mtime_size_collision() {
+        let root = std::env::temp_dir()
+            .join(format!("frameprism-cycle-guard-identity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let d_a = root.join("a");
+        let d_b = root.join("b");
+        std::fs::create_dir_all(&d_a).unwrap();
+        std::fs::create_dir_all(&d_b).unwrap();
+        // The same shape: one empty file each (the size half of the
+        // collision — the same directory size on the mount).
+        std::fs::write(d_a.join("x.bin"), b"").unwrap();
+        std::fs::write(d_b.join("x.bin"), b"").unwrap();
+        // The mtime half: the same instant on both dirs — the unix
+        // form (the windows std open of a directory is the named
+        // ACCESS_DENIED — code 5 — so the forcing is unix-only; the
+        // property assertion below is the windows form).
+        #[cfg(unix)]
+        {
+            let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+            for d in [&d_a, &d_b] {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(d)
+                    .unwrap()
+                    .set_modified(instant)
+                    .unwrap();
+            }
+        }
+        let m_a = std::fs::metadata(&d_a).unwrap();
+        let m_b = std::fs::metadata(&d_b).unwrap();
+        // The premise (the collision is real on this mount): the
+        // exact pair the pre-existing weak key keyed on is identical.
+        #[cfg(unix)]
+        assert_eq!(
+            m_a.modified().unwrap(),
+            m_b.modified().unwrap(),
+            "the forced mtimes are identical on this mount"
+        );
+        assert_eq!(
+            m_a.len(),
+            m_b.len(),
+            "the same-shape dirs share the directory size on this mount"
+        );
+        // The identity: DIFFERENT (the collision class is dead).
+        assert_ne!(
+            crate::dir_id(&d_a).unwrap(),
+            crate::dir_id(&d_b).unwrap(),
+            "two distinct dirs sharing the forced (mtime, size) must not share an identity (the false-skip class)"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The cycle-guard walker behavior (the skip / false-cycle
+    /// class): the temp tree — the root + two subdirs with the forced
+    /// (mtime, size) collision (the unix form — the mtime forcing is
+    /// unix-only: the windows std open of a directory is the named
+    /// ACCESS_DENIED) + the symlink cycle back into the root
+    /// (best-effort — the host's symlink policy decides; the
+    /// assertion holds either way) — walked by the actual
+    /// cycle-guard walker (`offload::traversal::collect_all_files`):
+    /// every real directory is visited exactly once (each file
+    /// appears exactly once — a skipped dir drops its files, a
+    /// double visit duplicates them), the cycle terminates, nothing
+    /// is skipped.
+    #[test]
+    fn cycle_guard_walker_visits_each_real_dir_once() {
+        let root = std::env::temp_dir()
+            .join(format!("frameprism-cycle-guard-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let a = root.join("a");
+        let b = root.join("b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("a1.bin"), b"x").unwrap();
+        std::fs::write(b.join("b1.bin"), b"y").unwrap();
+        // Force the collision on both subdirs (the same instant, the
+        // same one-file shape) — the unix form (the walker assertion
+        // below is the portable form — every platform).
+        #[cfg(unix)]
+        {
+            let instant = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+            for d in [&a, &b] {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .open(d)
+                    .unwrap()
+                    .set_modified(instant)
+                    .unwrap();
+            }
+        }
+        // The cycle: a symlink back into the root (best-effort — the
+        // host's symlink policy; the walker's symlink refusal + the
+        // visited set make the walk correct either way).
+        let cycle = root.join("cycle");
+        #[cfg(unix)]
+        {
+            let _ = std::os::unix::fs::symlink(&root, &cycle);
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::os::windows::fs::symlink_dir(&root, &cycle);
+        }
+        let files = crate::offload::traversal::collect_all_files(&root).unwrap();
+        let mut rels: Vec<String> = files.iter().map(|(r, _)| r.clone()).collect();
+        rels.sort();
+        assert_eq!(
+            rels,
+            vec!["a/a1.bin", "b/b1.bin"],
+            "every real dir visited exactly once, the cycle terminates, nothing is skipped (the forced collision must not false-skip a dir)"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 

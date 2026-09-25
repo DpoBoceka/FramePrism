@@ -65,13 +65,35 @@ fn main() {
         prefix_abs.join("include")
     };
 
+    // Per-platform static-lib naming (the same pinned prefix layout on
+    // every host, but the static-lib filenames are generator-specific):
+    //   unix (macos/linux): libturbojpeg.a / libjpeg.a
+    //                       (link libs: turbojpeg / jpeg)
+    //   windows (MSVC):     turbojpeg-static.lib / jpeg-static.lib
+    //                       (link libs: turbojpeg-static / jpeg-static —
+    //                        the CMake OUTPUT_NAME rename to
+    //                        libjpeg/libturbojpeg is unix-only)
+    // The TARGET (not the build host) picks the names: CARGO_CFG_TARGET_OS
+    // is the cargo-set authority (a cross-build links the target's
+    // shapes). The unix path emits byte-identical directives to before
+    // (the contract job re-proves the mac default).
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let (static_libs, link_libs): (&[&str], &[&str]) = if target_os == "windows" {
+        (
+            &["turbojpeg-static.lib", "jpeg-static.lib"],
+            &["turbojpeg-static", "jpeg-static"],
+        )
+    } else {
+        (&["libturbojpeg.a", "libjpeg.a"], &["turbojpeg", "jpeg"])
+    };
+
     // Named refusal: the resolved prefix must carry the link surface
     // (lib/ + include/ + the two static libs), however it was resolved.
     let mut missing: Vec<String> = Vec::new();
     if !libdir.is_dir() {
         missing.push("lib/ (the static library dir)".to_string());
     } else {
-        for name in ["libturbojpeg.a", "libjpeg.a"] {
+        for name in static_libs {
             if !libdir.join(name).is_file() {
                 missing.push(format!("lib/{name} (the static lib)"));
             }
@@ -99,10 +121,28 @@ fn main() {
         .opt_level(2)
         .compile("ljpeg_shim");
 
-    println!("cargo:rustc-link-search=native={}", libdir.display());
-    println!("cargo:rustc-link-lib=turbojpeg");
-    println!("cargo:rustc-link-lib=jpeg");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir.display());
+    // The link-search dir: the canonicalized prefix_abs/lib on unix
+    // (byte-invariant — the mac default emits exactly what the
+    // contract has always emitted); on the windows target the
+    // un-canonicalized absolute dir — the \\?\ verbatim form from
+    // canonicalize is the authority for the existence checks above,
+    // but the plain absolute form is the /LIBPATH: form link.exe
+    // accepts without question.
+    let link_search = if target_os == "windows" {
+        prefix.join("lib")
+    } else {
+        libdir.clone()
+    };
+
+    println!("cargo:rustc-link-search=native={}", link_search.display());
+    for lib in link_libs {
+        println!("cargo:rustc-link-lib={lib}");
+    }
+    // The -Wl,-rpath line is unix-only (MSVC has no rpath concept; the
+    // static link needs no runtime lookup either).
+    if target_os != "windows" {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir.display());
+    }
     println!("cargo:rerun-if-env-changed=JPEG_TURBO_PREFIX");
     println!("cargo:rerun-if-changed={}", shim.display());
 

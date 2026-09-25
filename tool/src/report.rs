@@ -28,7 +28,6 @@
 //! encode-time gate is the verdict's authority, the line is the
 //! record's echo).
 
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -188,15 +187,14 @@ fn is_tool_record(name: &str) -> bool {
 /// minus the tool's own records, clip-relative, sorted by rel.
 fn collect_members(base: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out: Vec<(String, PathBuf)> = Vec::new();
-    let mut visited: std::collections::HashSet<(u64, u64)> = std::collections::HashSet::new();
+    let mut visited: std::collections::HashSet<crate::DirId> = std::collections::HashSet::new();
     fn walk(
         base: &Path,
         dir: &Path,
         out: &mut Vec<(String, PathBuf)>,
-        visited: &mut std::collections::HashSet<(u64, u64)>,
+        visited: &mut std::collections::HashSet<crate::DirId>,
     ) -> std::io::Result<()> {
-        let meta = std::fs::metadata(dir)?;
-        let id = (meta.dev(), meta.ino());
+        let id = crate::dir_id(dir)?;
         if !visited.insert(id) {
             return Ok(()); // the cycle guard (the collect parity)
         }

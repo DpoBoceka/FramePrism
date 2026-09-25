@@ -9,9 +9,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The `--to` startup probe: the dest must exist
 /// (created) and be WRITABLE before any frame — a named refusal (the
 /// caller turns the `Err` into rc=2, before the gate + the encode).
@@ -48,11 +45,10 @@ fn collect_all_walk(
     base: &Path,
     dir: &Path,
     out: &mut Vec<(String, PathBuf)>,
-    visited: &mut std::collections::HashSet<(u64, u64)>,
+    visited: &mut std::collections::HashSet<crate::DirId>,
 ) -> Result<()> {
-    let meta = std::fs::metadata(dir)
+    let id = crate::dir_id(dir)
         .with_context(|| format!("read dir {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino()); // unix: std::os::unix::fs::MetadataExt
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }
@@ -557,6 +553,7 @@ mod tests {
     /// `offload_core_multi` (the funnel for every offload form —
     /// the per-command wiring is proven by the existing offload
     /// batteries).
+    #[cfg(unix)]
     #[test]
     fn offload_planted_intermediate_dir_symlink_refused() {
         let base = std::env::temp_dir().join(format!(
@@ -627,6 +624,7 @@ mod tests {
     /// acceptance proof). The alias is self-contained (the test
     /// creates its own link — the macOS `/tmp` → `/private/tmp`
     /// class is environment-dependent).
+    #[cfg(unix)]
     #[test]
     fn offload_volume_alias_accepted() {
         let base = std::env::temp_dir().join(format!(

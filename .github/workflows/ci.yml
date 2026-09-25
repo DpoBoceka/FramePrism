@@ -1,8 +1,11 @@
 # The CI gate: the macos-latest job running the make surface's thin
-# dispatch to ci/check.sh (the single source of gate truth) + two
-# source-portability CHECK jobs (check-linux / check-windows — cargo
-# check only, NOT the contract build — the honesty pin is in their
-# headers).
+# dispatch to ci/check.sh (the single source of gate truth — the
+# contract build), two source-portability CHECK jobs (check-linux /
+# check-windows — cargo check only, NOT the contract build — the
+# honesty pin is in their headers), and two release-binary BUILD jobs
+# (build-linux / build-windows — the pinned dep build for the host +
+# cargo build --locked --release + the uploaded artifact; the mac
+# contract job uploads the artifact the gate already built).
 #
 # The contract build is macOS-only (the committed patched prefix is
 # the Darwin build), so the job runs on macos-latest. No Homebrew
@@ -10,6 +13,15 @@
 # (zstd/tar) + the ISO writer (fstool) ride the committed Cargo.lock,
 # and the build inputs are committed with the repo, so no setup step
 # is needed beyond the toolchain.
+#
+# The build jobs (build-linux / build-windows) link the same pinned
+# source as the committed prefix, built for the host (deps/fetch.sh +
+# deps/build-libjpeg.sh into deps/.jpeg-prefix — the JPEG_TURBO_PREFIX
+# env override points tool/build.rs at the host-built prefix; the
+# committed Darwin prefix is the default, never silently substituted).
+# Known limit (the jxl path): --codec jxl spawns cjxl/djxl from PATH at
+# runtime; the committed pins are mac-only, so the linux/windows
+# artifacts use a host cjxl/djxl when present.
 #
 # Hardening (the publication review): least-privilege
 # permissions (the job needs ONLY read access to the checkout — the
@@ -106,6 +118,12 @@ jobs:
       - name: Run the ship gate
         run: make check
 
+      - name: Upload the macos artifact (the gate already built it — free)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-macos-aarch64
+          path: target/release/frameprism
+
   check-linux:
     # The source-portability CHECK (cargo check only — the contract
     # build is the macos-latest job against the committed Darwin
@@ -141,18 +159,26 @@ jobs:
           cd tool
           cargo check --locked
 
-  check-windows:
-    # The source-portability CHECK (cargo check only — the contract
-    # build is the macos-latest job against the committed Darwin
-    # prefix; a green check job does NOT mean a Windows binary is a
-    # supported build). Evidences the README's fact that Windows
-    # remains a source-portability target without a contract build.
-    # `--locked` keeps the committed Cargo.lock authoritative (a drift
-    # is a named FAIL, not a silent re-resolve). The run step is from
-    # the manifest root (tool/ — the repo root has no Cargo.toml).
-    name: cargo check --locked (windows-latest — source-portability CHECK only, not a contract build)
-    runs-on: windows-latest
-    timeout-minutes: 20
+  build-linux:
+    # The release-binary BUILD + artifact (ubuntu-latest): the pinned
+    # dep build for this host (deps/fetch.sh + deps/build-libjpeg.sh —
+    # the patched STATIC libjpeg-turbo prefix from the same pinned
+    # source the committed Darwin prefix was built from) + the
+    # JPEG_TURBO_PREFIX env override pointing tool/build.rs at the
+    # host-built prefix (the committed prefix is a darwin build —
+    # linking it here is a named refusal, never a silent fallback).
+    # cargo build --locked --release (the --locked posture of the check
+    # job) + the artifact. This is NOT the contract build (the contract
+    # is the macos-latest job against the committed prefix). Known
+    # limit (the jxl path): --codec jxl spawns cjxl/djxl from PATH at
+    # runtime; the committed pins are mac-only, so this artifact uses
+    # a host cjxl/djxl when present.
+    name: cargo build --locked --release (ubuntu-latest — release binary + artifact)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
@@ -171,7 +197,139 @@ jobs:
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
+      - name: Build the release binary (NOT the contract build)
+        run: |
+          cd tool
+          cargo build --locked --release
+
+      - name: Upload the linux artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-linux-x86_64
+          path: target/release/frameprism
+
+  check-windows:
+    # The source-portability CHECK (cargo check only — the contract
+    # build is the macos-latest job against the committed Darwin
+    # prefix; a green check job does NOT mean a Windows binary is a
+    # supported build). Evidences the README's fact that Windows
+    # remains a source-portability target without a contract build.
+    # `--locked` keeps the committed Cargo.lock authoritative (a drift
+    # is a named FAIL, not a silent re-resolve). The run step is from
+    # the manifest root (tool/ — the repo root has no Cargo.toml).
+    # The host dep build step (additive): tool/build.rs resolves the
+    # JPEG_TURBO_PREFIX even under cargo check, and the committed
+    # prefix is a darwin build that lacks the MSVC static names
+    # (jpeg-static.lib / turbojpeg-static.lib) — without the
+    # host-built prefix the windows target is a named build refusal.
+    # (check-linux needs no such step: the unix static names
+    # libjpeg.a / libturbojpeg.a exist in the committed prefix, and
+    # cargo check never links them.)
+    name: cargo check --locked (windows-latest — source-portability CHECK, host deps built — not a contract build)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
       - name: Source-portability check (NOT the contract build)
         run: |
           cd tool
           cargo check --locked
+
+  build-windows:
+    # The release-binary BUILD + artifact (windows-latest, the bash
+    # steps via Git Bash): the same shape as build-linux — the pinned
+    # dep build for this host (deps/fetch.sh + deps/build-libjpeg.sh —
+    # the MSVC static libs jpeg-static.lib / turbojpeg-static.lib,
+    # which tool/build.rs links per-platform) + the JPEG_TURBO_PREFIX
+    # env override + cargo build --locked --release + the artifact.
+    # NOT the contract build (the contract is the macos-latest job
+    # against the committed prefix). Known limit (the jxl path):
+    # --codec jxl spawns cjxl/djxl from PATH at runtime; the committed
+    # pins are mac-only, so this artifact uses a host cjxl/djxl when
+    # present.
+    name: cargo build --locked --release (windows-latest — release binary + artifact + the runtime traversal test)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
+      - name: Build the release binary (NOT the contract build)
+        run: |
+          cd tool
+          cargo build --locked --release
+
+      - name: Run the windows runtime test (the file-identity collision + the walker guard — the identity proven on a real windows host)
+        run: |
+          cd tool
+          cargo test --locked --release --lib -- cycle_guard
+
+      - name: Upload the windows artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-windows-x86_64.exe
+          path: target/release/frameprism.exe

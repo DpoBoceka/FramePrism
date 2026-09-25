@@ -245,13 +245,22 @@ pub fn canon(p: &Path) -> String {
         .unwrap_or_else(|_| p.to_string_lossy().into_owned())
 }
 
-#[cfg(unix)]
+/// Best-effort 0700 on unix; a no-op on other targets (the std-only
+/// `Permissions` surface carries no mode bits — the
+/// source-portability fallback).
 fn set_dir_0700(p: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(
-        p,
-        std::fs::Permissions::from_mode(0o700),
-    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(
+            p,
+            std::fs::Permissions::from_mode(0o700),
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = p;
+    }
 }
 
 /// Append one row to `path` (creates the dir 0700 + the versioned

@@ -1,0 +1,289 @@
+# The tag release: a `v*` tag push builds the 3-OS release binaries
+# (build-macos / build-linux / build-windows — the proven ci.yml build
+# shapes) and publishes them as the GitHub release assets (+ the
+# SHA256SUMS checksum file over the three files).
+#
+# Tag-only trigger (no branches, no PRs): the release runs are the
+# tag's. The tag points at a gated main (the contract gate ran on
+# main's CI before the tag exists), so the build jobs are BUILD-ONLY
+# (cargo build --locked --release + the uploaded artifact) — NOT the
+# contract gate (that is ci.yml's macos-latest make-check job).
+#
+# The build jobs mirror ci.yml's proven build shapes verbatim: the
+# pinned dep build for the host (deps/fetch.sh + deps/build-libjpeg.sh
+# — the patched static libjpeg-turbo prefix from the same pinned
+# source the committed Darwin prefix was built from), the
+# JPEG_TURBO_PREFIX env override + the CARGO_TARGET_DIR pin, cargo
+# build --locked --release, and the artifact (the same names the
+# publish job downloads). Known limit (the jxl path): --codec jxl
+# spawns cjxl/djxl from PATH at runtime; the committed pins are
+# mac-only, so the linux/windows artifacts use a host cjxl/djxl when
+# present.
+#
+# Hardening (the publication review): least-privilege permissions
+# (contents: read at the workflow level — the build jobs run
+# repo-controlled scripts + build.rs; the contents: write is the
+# publish job's job-level grant — the softprops publish is the single
+# contents-write consumer; actions: write for the cache service API —
+# the workflow uses NO secrets, so there is nothing for a run to
+# exfiltrate), a wall-clock timeout, and the action pins at commit
+# SHAs (the tag is named in the comment — a tag move cannot silently
+# change what runs).
+#
+# Honest limit (the tag trigger): this workflow cannot be exercised in
+# a PR run — its first real run is the next `v*` tag (a post-merge tag
+# push, like the v0.1.0 asset upload).
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read   # the default for the build jobs (they run the repo-controlled scripts + build.rs — the contents write is the publish job's job-level grant)
+  actions: write   # the actions/cache service API — the documented permission requirement (the build jobs SAVE caches; write covers the restore lookup + the save)
+
+jobs:
+  build-macos:
+    # The release-binary BUILD + artifact (macos-latest): the same
+    # shape as the linux/windows jobs (the pinned dep build for this
+    # host + cargo build --locked --release + the artifact). NOT the
+    # contract build (the contract is ci.yml's macos-latest make-check
+    # job against the committed Darwin prefix — the tag points at a
+    # gated main, so the contract was proven at the gate before this
+    # run exists).
+    name: "build + upload: macos"
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
+      - name: Build the release binary (NOT the contract build)
+        run: |
+          cd tool
+          cargo build --locked --release
+
+      - name: Upload the macos artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-macos-aarch64
+          path: target/release/frameprism
+
+  build-linux:
+    # The release-binary BUILD + artifact (ubuntu-latest): the pinned
+    # dep build for this host (deps/fetch.sh + deps/build-libjpeg.sh —
+    # the patched STATIC libjpeg-turbo prefix from the same pinned
+    # source the committed Darwin prefix was built from) + the
+    # JPEG_TURBO_PREFIX env override pointing tool/build.rs at the
+    # host-built prefix (the committed prefix is a darwin build —
+    # linking it here is a named refusal, never a silent fallback).
+    # cargo build --locked --release (the --locked posture of the
+    # check job) + the artifact. This is NOT the contract build (the
+    # contract is ci.yml's macos-latest job against the committed
+    # prefix). Known limit (the jxl path): --codec jxl spawns
+    # cjxl/djxl from PATH at runtime; the committed pins are mac-only,
+    # so this artifact uses a host cjxl/djxl when present.
+    name: "build + upload: linux"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
+      - name: Build the release binary (NOT the contract build)
+        run: |
+          cd tool
+          cargo build --locked --release
+
+      - name: Upload the linux artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-linux-x86_64
+          path: target/release/frameprism
+
+  build-windows:
+    # The release-binary BUILD + artifact (windows-latest, the bash
+    # steps via Git Bash): the same shape as build-linux — the pinned
+    # dep build for this host (deps/fetch.sh + deps/build-libjpeg.sh —
+    # the MSVC static libs jpeg-static.lib / turbojpeg-static.lib,
+    # which tool/build.rs links per-platform) + the JPEG_TURBO_PREFIX
+    # env override + cargo build --locked --release + the artifact.
+    # NOT the contract build (the contract is ci.yml's macos-latest
+    # job against the committed prefix). Known limit (the jxl path):
+    # --codec jxl spawns cjxl/djxl from PATH at runtime; the committed
+    # pins are mac-only, so this artifact uses a host cjxl/djxl when
+    # present.
+    name: "build + upload: windows (+ the runtime traversal test)"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      JPEG_TURBO_PREFIX: ${{ github.workspace }}/deps/.jpeg-prefix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Install the Rust toolchain (1.98)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # v1
+        with:
+          toolchain: "1.98"
+
+      - name: Cache the cargo registry (additive — the download cache)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Cache the cargo target dir (additive — the toolchain-bound key)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          restore-keys: ${{ runner.os }}-cargo-target-1.98-
+
+      - name: Build the pinned deps for this host (the patched static prefix)
+        run: |
+          bash deps/fetch.sh
+          bash deps/build-libjpeg.sh
+
+      - name: Build the release binary (NOT the contract build)
+        run: |
+          cd tool
+          cargo build --locked --release
+
+      - name: Run the windows runtime test (the file-identity collision + the walker guard — the identity proven on a real windows host)
+        run: |
+          cd tool
+          cargo test --locked --release --lib -- cycle_guard
+
+      - name: Upload the windows artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: frameprism-windows-x86_64.exe
+          path: target/release/frameprism.exe
+
+  publish:
+    # The release publish (ubuntu-latest, needs the three builds):
+    # the three downloaded artifacts (renamed to the normalized asset
+    # names — the mac/linux artifacts both carry the file `frameprism`,
+    # so each lands in its own subdir first) + the SHA256SUMS checksum
+    # file over the three files + the softprops publish (the release
+    # name = the tag; fail_on_unmatched keeps a re-run of the tag an
+    # update, not a FAIL).
+    name: "publish: the release (the 3-OS binaries + SHA256SUMS)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-macos, build-linux, build-windows]
+    permissions:
+      contents: write   # the softprops/action-gh-release publish is the single contents-write consumer (create the release + its assets on the tag's ref)
+    steps:
+      - name: Download the macos artifact (its own subdir — the file inside is `frameprism`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-macos-aarch64
+          path: dist/macos
+
+      - name: Download the linux artifact (its own subdir — the file inside is `frameprism`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-linux-x86_64
+          path: dist/linux
+
+      - name: Download the windows artifact (its own subdir — the file inside is `frameprism.exe`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-windows-x86_64.exe
+          path: dist/windows
+
+      - name: Normalize the asset names (+ the SHA256SUMS over the three files)
+        run: |
+          mv dist/macos/frameprism dist/frameprism-macos-aarch64
+          mv dist/linux/frameprism dist/frameprism-linux-x86_64
+          mv dist/windows/frameprism.exe dist/frameprism-windows-x86_64.exe
+          rm -rf dist/macos dist/linux dist/windows
+          (cd dist && sha256sum frameprism-macos-aarch64 frameprism-linux-x86_64 frameprism-windows-x86_64.exe > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Publish the release (the tag's name + the three binaries + SHA256SUMS)
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched: false
+          files: |
+            dist/frameprism-macos-aarch64
+            dist/frameprism-linux-x86_64
+            dist/frameprism-windows-x86_64.exe
+            dist/SHA256SUMS
+          body: |
+            FramePrism ${{ github.ref_name }} — the prebuilt binaries (built from the tagged commit).
+
+            Platforms: macOS (arm64) · Linux (x86_64) · Windows (x86_64).
+            The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
+            Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).

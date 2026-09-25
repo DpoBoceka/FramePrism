@@ -70,9 +70,6 @@ use crate::jxl::{pam_header, reinterleave, PLANES};
 use crate::tiff::{self, IfdEntry, Meta};
 use crate::tileenc::{self, Grid};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The input codec for `frameprism decode` (cf. the encode `--codec`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Codec {
@@ -321,12 +318,11 @@ struct JxlDesc {
 fn walk(
     base: &Path,
     dir: &Path,
-    visited: &mut std::collections::HashSet<(u64, u64)>,
+    visited: &mut std::collections::HashSet<crate::DirId>,
     visit_file: &mut dyn FnMut(&Path, &Path) -> Result<()>,
 ) -> Result<()> {
-    let meta = std::fs::metadata(dir)
+    let id = crate::dir_id(dir)
         .with_context(|| format!("read dir {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino());
     if !visited.insert(id) {
         return Ok(()); // already visited — symlink cycle (or hard-link fan-in)
     }

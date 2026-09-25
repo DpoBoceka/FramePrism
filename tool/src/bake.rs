@@ -551,9 +551,9 @@ fn write_tar_stream<W: std::io::Write>(
 
 /// The source file's permission bits for the USTAR mode field (the D3
 /// contract): the full octal mode on unix (the primary platform — the
-/// committed byte contract); the read/write/execute booleans derived
-/// mode on other targets (the source-portability fallback — the byte
-/// contract is the unix one).
+/// committed byte contract); the read-only flag derived mode on other
+/// targets (the source-portability fallback — the std-only `Permissions`
+/// surface exposes only that bit; the byte contract is the unix one).
 fn source_mode_bits(md: &std::fs::Metadata) -> u32 {
     #[cfg(unix)]
     {
@@ -562,18 +562,13 @@ fn source_mode_bits(md: &std::fs::Metadata) -> u32 {
     }
     #[cfg(not(unix))]
     {
-        let p = md.permissions();
-        let mut mode = 0u32;
-        if p.can_read() {
-            mode |= 0o444;
+        // The std-only surface: the read-only flag is the only mode
+        // bit the portable Permissions exposes.
+        if md.permissions().readonly() {
+            0o444
+        } else {
+            0o666
         }
-        if p.can_write() {
-            mode |= 0o222;
-        }
-        if p.can_execute() {
-            mode |= 0o111;
-        }
-        mode
     }
 }
 

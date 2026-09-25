@@ -174,9 +174,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
 /// The history's directory name (the spec's 5.3.1: the `ascmhl`
 /// directory at the scope's top level — the mandatory ignore default
 /// #2).
@@ -1236,7 +1233,7 @@ fn mtime_unix(meta: &std::fs::Metadata) -> u64 {
 
 /// The scope walk (the built-in ignore set — the write side's
 /// walk): the `walk_with` body with `is_ignored`.
-fn walk(dir: &Path, visited: &mut HashSet<(u64, u64)>) -> Result<DirNode> {
+fn walk(dir: &Path, visited: &mut HashSet<crate::DirId>) -> Result<DirNode> {
     walk_with(dir, visited, &is_ignored)
 }
 
@@ -1251,12 +1248,13 @@ fn walk(dir: &Path, visited: &mut HashSet<(u64, u64)>) -> Result<DirNode> {
 /// the re-verify surface).
 fn walk_with(
     dir: &Path,
-    visited: &mut HashSet<(u64, u64)>,
+    visited: &mut HashSet<crate::DirId>,
     ignored: &dyn Fn(&str) -> bool,
 ) -> Result<DirNode> {
     let meta = std::fs::metadata(dir)
         .with_context(|| format!("stat the ascmhl scope {}", dir.display()))?;
-    let id = (meta.dev(), meta.ino()); // unix: std::os::unix::fs::MetadataExt
+    let id = crate::dir_id(dir)
+        .with_context(|| format!("stat the ascmhl scope {}", dir.display()))?;
     if !visited.insert(id) {
         bail!("the ascmhl scope walk hit a directory cycle at {}", dir.display());
     }

@@ -61,13 +61,22 @@ pub fn status_path() -> PathBuf {
     }
 }
 
-#[cfg(unix)]
+/// Best-effort 0700 on unix; a no-op on other targets (the std-only
+/// `Permissions` surface carries no mode bits — the
+/// source-portability fallback).
 fn set_dir_0700(p: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(
-        p,
-        std::fs::Permissions::from_mode(0o700),
-    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(
+            p,
+            std::fs::Permissions::from_mode(0o700),
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = p;
+    }
 }
 
 /// Open (CREATE + TRUNCATE) `path` for the status surface, 0600,
@@ -89,14 +98,16 @@ fn open_at(path: &Path) -> Option<Status> {
             }
         }
     }
-    use std::os::unix::fs::OpenOptionsExt;
-    let file = match std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create(true);
+    opts.truncate(true);
+    opts.write(true);
+    #[cfg(unix)]
     {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let file = match opts.open(path) {
         Ok(f) => f,
         Err(err) => {
             eprintln!(
@@ -106,6 +117,7 @@ fn open_at(path: &Path) -> Option<Status> {
             return None;
         }
     };
+    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(
