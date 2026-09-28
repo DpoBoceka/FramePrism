@@ -2280,6 +2280,136 @@ mod tests {
         assert_eq!(top_files(&outer6), 0, "6: the dest root holds no file (only the input dir)");
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    /// The absent-binary named refusal (the pre-first-byte position):
+    /// the refusal line (the stable leading phrase — one spelling per
+    /// class — + the v0.12.0 parity + the mac committed-pin form +
+    /// the per-OS posture pointer) + ZERO residuals (no output dir,
+    /// no ingest manifest — the ledger row is the dispatch's
+    /// usage-class routing on this same prefix: no run starts, no
+    /// row; the rc=2 is the run-level Err exit). No real binary
+    /// needed (the absent paths never spawn).
+    #[test]
+    fn jxl_absent_binary_refuses_before_any_byte() {
+        let base = std::env::temp_dir().join(format!(
+            "frameprism-jxl-absent-bin-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // The empty input: the probe fires BEFORE the collection (the
+        // refusal strictly precedes the no-frames bail).
+        let input = base.join("in");
+        std::fs::create_dir_all(&input).unwrap();
+        let refuse =
+            |cjxl: std::path::PathBuf, djxl: std::path::PathBuf, output: &Path, what: &str| {
+                let opts = JxlOpts {
+                    cjxl_bin: cjxl,
+                    djxl_bin: djxl,
+                    threads: 1,
+                    effort: 7,
+                    parallel: 1,
+                };
+                let err = process_dir(&input, output, false, false, &opts, None).unwrap_err();
+                let msg = format!("{err:#}");
+                assert!(
+                    msg.starts_with(&format!("{BINARY_REFUSAL_PREFIX} {what} ")),
+                    "{what}: the named refusal leads with the stable phrase + the class — {msg}"
+                );
+                assert!(
+                    msg.contains("v0.12.0"),
+                    "{what}: the parity requirement — {msg}"
+                );
+                assert!(
+                    msg.contains("DYLD_FALLBACK_LIBRARY_PATH=deps/.jxl-libs"),
+                    "{what}: the mac committed-pin form — {msg}"
+                );
+                assert!(
+                    msg.contains("docs/jxl-tier.md"),
+                    "{what}: the per-OS posture pointer — {msg}"
+                );
+                assert!(
+                    !output.exists(),
+                    "{what}: ZERO residuals — the output dir is never created (no manifest either)"
+                );
+            };
+        // (a) the absent cjxl (the default-path failure class).
+        refuse(
+            std::path::PathBuf::from("/nonexistent/cjxl"),
+            std::path::PathBuf::from("/nonexistent/djxl"),
+            &base.join("out-a"),
+            "cjxl",
+        );
+        // (b) the absent djxl (the spawnable cjxl stub passes its
+        // probe — any version, on purpose; the djxl probe refuses
+        // the same class).
+        let stub = base.join("cjxl-stub");
+        std::fs::write(&stub, "#!/bin/sh\necho \"v9.9.9 stub\"\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut m = std::fs::metadata(&stub).unwrap().permissions();
+            m.set_mode(0o755);
+            std::fs::set_permissions(&stub, m).unwrap();
+        }
+        refuse(
+            stub,
+            std::path::PathBuf::from("/nonexistent/djxl"),
+            &base.join("out-b"),
+            "djxl",
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The unspawnable-binary class (a file without the exec bit):
+    /// the SAME named refusal as the absent case (the spawn failure
+    /// is the class — not the path's existence) + ZERO residuals.
+    #[test]
+    fn jxl_unspawnable_binary_refuses_same_class() {
+        let base = std::env::temp_dir().join(format!(
+            "frameprism-jxl-unspawnable-bin-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let input = base.join("in");
+        std::fs::create_dir_all(&input).unwrap();
+        // The non-executable file (unix: 0644 — the exec bit is the
+        // spawnability; non-unix: a plain file that is not a
+        // spawnable executable).
+        let bad = base.join("cjxl");
+        std::fs::write(&bad, "#!/bin/sh\necho \"never spawned\"\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut m = std::fs::metadata(&bad).unwrap().permissions();
+            m.set_mode(0o644);
+            std::fs::set_permissions(&bad, m).unwrap();
+        }
+        let opts = JxlOpts {
+            cjxl_bin: bad,
+            djxl_bin: std::path::PathBuf::from("/nonexistent/djxl"),
+            threads: 1,
+            effort: 7,
+            parallel: 1,
+        };
+        let output = base.join("out");
+        let err = process_dir(&input, &output, false, false, &opts, None).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.starts_with(&format!("{BINARY_REFUSAL_PREFIX} cjxl ")),
+            "the SAME class as the absent case (the spawn failure is the class) — {msg}"
+        );
+        assert!(
+            msg.contains("unspawnable"),
+            "the named class word — {msg}"
+        );
+        assert!(
+            !output.exists(),
+            "ZERO residuals — the output dir is never created"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
     // The streaming digest-triple VALUE identity: the
     // single-pass size + sha + crc equals the one-shot values at
