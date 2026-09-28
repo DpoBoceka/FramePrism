@@ -128,9 +128,64 @@ use crate::worker;
             input: input.to_path_buf(),
             jobs: 1,
             source: source.map(|s| s.to_path_buf()),
+            eject: false,
         });
         std::env::remove_var("FRAMEPRISM_LEDGER");
         (rc, ledger_verdict(input))
+    }
+
+    /// The `--eject` variant of `run` (the verify-against-source
+    /// surface's release gate — the same ENV_LOCK discipline:
+    /// `FP_EJECT_CMD` / `FP_EJECT_LOG` / `FP_EJECT_EXIT` are
+    /// process-global env vars the fake eject binary reads at spawn
+    /// time; the critical section serializes the set → run → remove).
+    #[cfg(unix)]
+    pub(crate)fn run_eject(
+        input: &Path,
+        source: Option<&Path>,
+        fake: &Path,
+        log: &Path,
+        exit_code: Option<u8>,
+    ) -> (ExitCode, Option<String>) {
+        let _guard = crate::ENV_LOCK.lock().expect("env lock");
+        let p = input.join(".ledger-test.tsv");
+        let _ = std::fs::remove_file(&p); // a torn prior row would skew the last-row read
+        let _ = std::fs::remove_file(log); // a torn prior record would skew the called/not-called read
+        std::env::set_var("FRAMEPRISM_LEDGER", &p);
+        std::env::set_var("FP_EJECT_CMD", fake.to_str().unwrap());
+        std::env::set_var("FP_EJECT_LOG", log.to_str().unwrap());
+        if let Some(code) = exit_code {
+            std::env::set_var("FP_EJECT_EXIT", code.to_string());
+        }
+        let rc = run_audit(&AuditArgs {
+            input: input.to_path_buf(),
+            jobs: 1,
+            source: source.map(|s| s.to_path_buf()),
+            eject: true,
+        });
+        std::env::remove_var("FRAMEPRISM_LEDGER");
+        std::env::remove_var("FP_EJECT_CMD");
+        std::env::remove_var("FP_EJECT_LOG");
+        std::env::remove_var("FP_EJECT_EXIT");
+        (rc, ledger_verdict(input))
+    }
+
+    /// The fake eject binary (the `FP_EJECT_CMD` test seam —
+    /// inline-generated in the test's temp dir, NEVER committed:
+    /// it records its arg (the mount point) to `$FP_EJECT_LOG` +
+    /// exits `$FP_EJECT_EXIT` (default 0) — deterministic, no
+    /// network, no real volume).
+    #[cfg(unix)]
+    pub(crate)fn write_fake_eject(path: &Path) {
+        std::fs::write(
+            path,
+            "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$FP_EJECT_LOG\"\nexit \"${FP_EJECT_EXIT:-0}\"\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(path, perms).unwrap();
     }
 
     /// The ledger row's verdict column of the `run`/`run_source`

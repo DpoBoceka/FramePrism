@@ -1437,6 +1437,7 @@ mod tests {
             input: d1.clone(),
             jobs: 1,
             source: None,
+            eject: false,
         });
         std::env::remove_var("FRAMEPRISM_LEDGER");
         assert_eq!(rc, ExitCode::SUCCESS, "the audit's rc on a fan-out dest = 0");

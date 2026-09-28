@@ -44,6 +44,30 @@ pub struct AuditArgs {
     /// verdicts).
     #[arg(long)]
     pub source: Option<PathBuf>,
+    /// Auto-eject the card's volume AFTER the CARD verdict (the
+    /// release gate's additive action — the verdict line prints
+    /// first; the eject is an UNMOUNT only — the tool never wipes the
+    /// card, the format remains the operator's action). ONLY `CARD
+    /// UNLOCKED` sanctions the eject (the named `CARD EJECTED` line —
+    /// the audit's rc is unchanged: 0): `CARD REFUSED` / `CARD
+    /// UNVERIFIABLE` + `--eject` = the named `EJECT REFUSED` lines,
+    /// the audit's rc UNCHANGED (the card stays as evidence / the
+    /// rows are unverified). The eject command's failure (device
+    /// busy, not a volume, missing binary) = the named `EJECT FAIL`
+    /// line + rc 1 (the requested action did not happen). The
+    /// platform eject (the std-only spawn): macOS = `diskutil eject
+    /// <mount-point>`; Linux = the /proc/mounts longest-prefix match
+    /// of the source path → `eject <device>`; Windows = the named
+    /// `EJECT REFUSED` platform refusal (the std-only boundary — the
+    /// UNLOCKED verdict + rc 0 stand: the release is not refused,
+    /// only the auto-eject). The env override `FP_EJECT_CMD` replaces
+    /// the spawned eject command (the documented test seam — the
+    /// CI_CARGO_AUDIT_BIN precedent; unset = the platform command).
+    /// `--eject` WITHOUT `--source` = the named rc=2 (a CARD verdict
+    /// does not exist without a source — the eject gate IS the
+    /// verdict).
+    #[arg(long)]
+    pub eject: bool,
 }
 
 /// The `frameprism restore` CLI arguments (the `Cmd::Restore` payload).

@@ -75,6 +75,56 @@ and the tool's verdict is the release gate's claim.
    `CARD_UNVERIFIABLE`); an audit without `--source` keeps the
    pre-existing `OK`/`FAIL` verdicts, unchanged.
 
+   **The `--eject` form (the auto-eject after a verified audit — the
+   release gate's additive action):**
+
+   ```
+   frameprism audit <archive-drive>/out --source <card-root> --eject
+   ```
+
+   The eject runs ONLY after the CARD verdict has printed (the
+   verdict's own words stand — the eject is an UNMOUNT only: the tool
+   still never wipes the card; the format remains the operator's
+   action). The gate (the safety property): only `CARD UNLOCKED`
+   sanctions the eject.
+
+   - `CARD UNLOCKED` + `--eject` → the volume is ejected:
+     `CARD EJECTED (<mount-point> — the verify-before-wipe gate is
+     clean; the card is released + ejected)` — **rc 0** (the audit's
+     verdict is unchanged).
+   - `CARD REFUSED` + `--eject` → the named `EJECT REFUSED (the CARD
+     verdict is REFUSED — the card must stay as evidence; no eject)`
+     line — the audit's rc is UNCHANGED (1).
+   - `CARD UNVERIFIABLE` + `--eject` → the named `EJECT REFUSED (the
+     CARD verdict is UNVERIFIABLE — the source rows could not be
+     verified; no eject)` line — the rc follows the archive audit
+     (UNCHANGED by the flag).
+   - The eject command's failure (device busy, not a volume, missing
+     binary) → the named `EJECT FAIL (the eject command failed: …)`
+     line + **rc 1** (the requested action did not happen — the
+     operator must know; the verdict line above already printed).
+   - Windows: the named platform refusal (`EJECT REFUSED (the
+     auto-eject is not yet supported on this platform — …)`) — the
+     std-only boundary (a specific-volume eject has no clean std
+     mechanism; the Shell API needs FFI). `CARD UNLOCKED` + rc 0
+     stand: the release is not refused, only the auto-eject — the
+     operator's own unmount proceeds.
+
+   The platform eject (the std-only spawn): macOS =
+   `diskutil eject <mount-point>`; Linux = the `/proc/mounts`
+   longest-prefix match of the source path → `eject <device>`.
+   The env override `FP_EJECT_CMD` replaces the spawned eject command
+   (the documented test seam — the CI_CARGO_AUDIT_BIN precedent;
+   unset = the platform command). `--eject` without `--source` is the
+   named **rc 2** (a CARD verdict does not exist without a source —
+   the eject gate IS the verdict).
+
+   With `--eject`, the ops ledger row's verdict column carries the
+   eject outcome (`CARD_OK_EJECTED` / `CARD_OK_EJECT_REFUSED` /
+   `CARD_OK_EJECT_FAIL` / `CARD_REFUSED_EJECT_REFUSED` /
+   `CARD_UNVERIFIABLE_EJECT_REFUSED`); without `--eject` the CARD_*
+   verdicts above stand.
+
 3. **Bake the archive.** With the card released, the archive dir
    becomes the working archive; the reel container is baked from it:
 
@@ -134,7 +184,9 @@ rows — that comparison is the verify-before-unmount gate.
   format path. The workflow's safety property is the ordering: encode →
   verify → release. `CARD UNLOCKED` is the only state in which
   reusing (or formatting) the card is sanctioned; everything else
-  keeps the card as evidence.
+  keeps the card as evidence. The `--eject` flag's auto-eject is an
+  UNMOUNT only (the verify-before-unmount release) — not a wipe: it
+  reinforces the ordering, never weakens it.
 - **Card I/O is the bottleneck.** The encode reads every frame once
   (the ETA line estimates from that), and the `--source` audit
   re-reads + re-hashes the entire card. On a slow USB card both steps
