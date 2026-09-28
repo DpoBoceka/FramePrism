@@ -524,21 +524,62 @@ pub fn reinterleave(planes: [&[u16]; 4], w: u32, h: u32) -> Vec<u16> {
 // subprocess plumbing
 // ---------------------------------------------------------------------------
 
+/// The stable leading phrase of the jxl binary refusal (one spelling
+/// per class): the `version_line` refusal message leads with it, the
+/// dispatch's usage-class prefix list carries it (a usage-class rc=2
+/// never starts a run — no ledger row), and the tests pin it.
+pub const BINARY_REFUSAL_PREFIX: &str = "jxl binary";
+
+/// The house named refusal for the absent/unspawnable cjxl/djxl
+/// binary (the ≤2-line form): the tier's v0.12.0 parity requirement,
+/// the macOS committed-pin form, the Linux/Windows host-build form
+/// (the distro caveat + the `--pins` enforcement), and the per-OS
+/// posture pointer. `what` = the failed class (`cjxl`/`djxl`), `bin`
+/// the resolved path, `err` the spawn failure.
+fn binary_refusal(what: &str, bin: &Path, err: &std::io::Error) -> String {
+    let bin = bin.display();
+    format!(
+        "{BINARY_REFUSAL_PREFIX} {what} {bin} is absent or unspawnable (spawn: {err}). \
+         The jxl tier needs the host's cjxl + djxl at the pinned v0.12.0. \
+         macOS: the committed pin (--cjxl-bin deps/pinned-binaries/cjxl + \
+         --djxl-bin deps/pinned-binaries/djxl, DYLD_FALLBACK_LIBRARY_PATH=deps/.jxl-libs). \
+         Linux/Windows: a host build of libjxl at the pinned tag (deps/build-libjxl.sh \
+         is the reference recipe; unpinned distro packages break the version parity — \
+         --pins enforces it). Per-OS posture: docs/jxl-tier.md"
+    )
+}
+
 /// First line of `bin --version` (the sidecar `jxl_version` column).
-/// Fails fast (named) when the binary is missing or errors — so a bogus
+/// The spawn-failure class (an absent/unspawnable binary) is the
+/// NAMED REFUSAL — unwrapped, so the line leads with the stable
+/// BINARY_REFUSAL_PREFIX (the usage class — no ledger row); a bogus
 /// `--cjxl-bin` exits non-zero BEFORE anything is written (atomicity).
-fn version_line(bin: &Path) -> Result<String> {
-    let out = std::process::Command::new(bin)
+/// Present + rc≠0 → the pre-existing run-level "failed (rc)" class
+/// (the djxl call carries the family note — the byte-identical
+/// message); present + any version → PASSES (the version behavior is
+/// unchanged — the sidecar stamps the version found; parity is
+/// enforced only by the opt-in `--pins` gate).
+fn version_line(what: &str, bin: &Path) -> Result<String> {
+    let out = match std::process::Command::new(bin)
         .arg("--version")
         .output()
-        .with_context(|| format!("run {} --version", bin.display()))?;
+    {
+        Ok(out) => out,
+        Err(err) => bail!("{}", binary_refusal(what, bin, &err)),
+    };
     if !out.status.success() {
-        bail!(
+        let msg = format!(
             "{} --version failed (rc {:?}): {}",
             bin.display(),
             out.status.code(),
             String::from_utf8_lossy(&out.stderr).trim()
         );
+        if what == "djxl" {
+            bail!(
+                "djxl --version (the verify pass needs the same binary family as cjxl): {msg}"
+            );
+        }
+        bail!("{msg}");
     }
     Ok(String::from_utf8_lossy(&out.stdout)
         .lines()
@@ -894,6 +935,17 @@ pub fn process_dir(
     opts: &JxlOpts,
     to: Option<&Path>,
 ) -> Result<Report> {
+    // The cjxl/djxl probe — the NAMED REFUSAL before the first byte
+    // (the "0 files written" discipline): the output dir is not
+    // created, the ingest manifest is not written, and the
+    // usage-class routing (the BINARY_REFUSAL_PREFIX in the
+    // dispatch's prefix list) appends no ledger row. The version
+    // behavior is unchanged: a present binary of ANY version passes
+    // (the sidecar stamps it; parity is enforced only by the opt-in
+    // --pins gate).
+    let cjxl_version = version_line("cjxl", &opts.cjxl_bin)?;
+    version_line("djxl", &opts.djxl_bin)?;
+
     std::fs::create_dir_all(output)
         .with_context(|| format!("create output dir {}", output.display()))?;
 
@@ -946,27 +998,23 @@ pub fn process_dir(
     // path mirrors the RAW input to the dest identically after the
     // encode): the dest
     // must be DISJOINT from the input AND the output. The named
-    // rc=2 BEFORE any frame + before the cjxl/djxl version probes
-    // (the refusal tests need no pinned binaries). The shared
-    // helper is the single code path (the j92 path's band is the
-    // same call). NAMED RESIDUAL (pre-existing, recorded not moved — the band site
-    // pinned here): the ingest manifest above is written before this band
-    // on the jxl path — a refused jxl `--to` leaves that record
-    // file (never a frame, never a dest write). Then the dest must
-    // exist + be WRITABLE (the named rc=2 startup refusal — see the
-    // j92 path).
+    // rc=2 BEFORE any frame. The cjxl/djxl probes now PRECEDE the
+    // band (the pre-first-byte position — the named binary refusal
+    // fires before the output dir, the manifest, and the band), so
+    // the band's wiring tests run with spawnable stub binaries
+    // (any version passes the probe). The shared helper is the
+    // single code path (the j92 path's band is the same call).
+    // NAMED RESIDUAL (pre-existing, recorded not moved — the band
+    // site pinned here): the ingest manifest above is written before
+    // this band on the jxl path — a refused jxl `--to` leaves that
+    // record file (never a frame, never a dest write). Then the dest
+    // must exist + be WRITABLE (the named rc=2 startup refusal — see
+    // the j92 path).
     if let Some(dest) = to {
         crate::offload::check_to_band(input, output, dest)?;
         crate::offload::check_dest_writable(dest)
             .with_context(|| format!("the --to dest {} (the two-destination offload target)", dest.display()))?;
     }
-
-    // Fail fast on a bogus binary BEFORE anything is written (atomicity:
-    // no partial/renamed output on encoder failure).
-    let cjxl_version = version_line(&opts.cjxl_bin)?;
-    version_line(&opts.djxl_bin).with_context(|| {
-        "djxl --version (the verify pass needs the same binary family as cjxl)"
-    })?;
 
     // Sidecars copied through (same atomic tmp+rename discipline as the
     // J92 worker).
@@ -2118,12 +2166,13 @@ mod tests {
     /// single code path (the topology table + the exact lines are
     /// unit-pinned in offload/forms.rs
     /// `to_band_six_topologies_refuse_named`); this battery
-    /// proves the JXL wiring: the band fires BEFORE the cjxl/djxl
-    /// version probes (the bogus binary paths are never probed —
-    /// the refusal needs no pinned binaries — a regression that
-    /// moves the band after the probes fails with the version-probe
-    /// error, not the band's named line) + the zero-FRAME-writes
-    /// proof. The input must PASS the ingest gate (the gate
+    /// proves the JXL wiring: the band fires BEFORE any frame (the
+    /// cjxl/djxl probes now PRECEDE the band at the pre-first-byte
+    /// position — the spawnable stub binaries pass them at any
+    /// version, so the band's own named refusal is what each case
+    /// asserts; a regression that moves the band after the frame
+    /// prep fails with a frame write, not the band's named line)
+    /// + the zero-FRAME-writes proof. The input must PASS the ingest gate (the gate
     /// precedes the band on the jxl path): the synthetic A001-
     /// identity frame + the profile override. NAMED RESIDUAL
     /// (pre-existing, recorded, not
@@ -2143,12 +2192,28 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        // The bogus binary paths: the band fires before the version
-        // probes — they are never probed (the named refusal needs
-        // no pinned binaries).
+        // The spawnable stub binaries: the probes now PRECEDE the
+        // band (the pre-first-byte position), so the probes must
+        // pass to reach the band — a 2-line sh stub per binary.
+        // The stubs print a NON-pinned version on purpose: any
+        // version passes the probe (the version behavior is
+        // unchanged — parity is the --pins gate's job), and the
+        // band's own refusal is what this battery proves.
+        let stub_bin = |name: &str| -> std::path::PathBuf {
+            let p = base.join(name);
+            std::fs::write(&p, "#!/bin/sh\necho \"v9.9.9 stub\"\n").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut m = std::fs::metadata(&p).unwrap().permissions();
+                m.set_mode(0o755);
+                std::fs::set_permissions(&p, m).unwrap();
+            }
+            p
+        };
         let opts = JxlOpts {
-            cjxl_bin: std::path::PathBuf::from("/nonexistent/cjxl"),
-            djxl_bin: std::path::PathBuf::from("/nonexistent/djxl"),
+            cjxl_bin: stub_bin("cjxl-stub"),
+            djxl_bin: stub_bin("djxl-stub"),
             threads: 1,
             effort: 7,
             parallel: 1,
