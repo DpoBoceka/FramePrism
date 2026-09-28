@@ -370,7 +370,7 @@ per-gate version of the new-camera principle above): the inputs are
 (a) a clip at the new geometry from the camera, (b) the measured output of the same clip (the golden source), (c) one measurement
 pass that derives the contract from the golden bytes (the grid, the
 per-tile geometry, the selection key, the DNG layout) and implements
-it per-gate with the byte-identity golden test as the gate. Private footage
+it per-gate with the structural pins + the round-trip + the NLE spot-check as the gate (the golden = the interop oracle + the benchmark, not the byte spec). Private footage
 and footage-derived onboarding measurements are not distributed.
 
 ## The FHD + OG2K mode byte contract (the log10 + downscale2x measured rows)

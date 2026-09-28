@@ -2347,11 +2347,12 @@ mod tests {
     }
 
 
- /// PARITY (the measured reference contract, ): the 3K
-    /// 252\u{00d7}252 grid encode must be BYTE-IDENTICAL to the reference
- /// product's lossless output on every corpus frame (the maintainer's
- /// reference corpus). Corpus-conditional (skip when the corpus is
-    /// absent) so the gate also holds on a clean checkout.
+    /// PARITY (the measured reference contract — the interop oracle +
+    /// benchmark, NOT the acceptance): the 3K 252\u{00d7}252 grid encode
+    /// is BYTE-IDENTICAL to the SoC's lossless output on every corpus
+    /// frame (the maintainer's reference corpus) — the measured
+    /// byte-identity evidence. Corpus-conditional (skip when the corpus
+    /// is absent) so the gate also holds on a clean checkout.
     #[test]
     fn golden_3k_encode_byte_identical() {
         let _g = crate::ENV_LOCK.lock().expect("env lock");
