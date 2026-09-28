@@ -48,10 +48,12 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO/target}"
 
 echo "=== ci check-xcheck: $(date '+%Y-%m-%d %H:%M:%S') repo=$REPO ==="
 
-# --- step 1: build the harness (release; the lock pin is committed) ---
-echo "--- build the harness (release) ---"
-if ! cargo build --release --manifest-path "$SCRIPT_DIR/jxl-xcheck/Cargo.toml"; then
-  echo "FAIL check-xcheck: cargo build --release (ci/jxl-xcheck) failed"
+# --- step 1: build the harness (release; the lock pin is committed —
+# --locked: a stale lock is a NAMED FAIL (the cargo lock error), never
+# a silent re-resolve that rewrites the committed lock in place) ---
+echo "--- build the harness (release, --locked) ---"
+if ! cargo build --release --locked --manifest-path "$SCRIPT_DIR/jxl-xcheck/Cargo.toml"; then
+  echo "FAIL check-xcheck: cargo build --release --locked (ci/jxl-xcheck) failed (the committed lock is stale — re-resolve it in-tree and land the updated lock, the docs/security.md re-pin pattern)"
   exit 1
 fi
 HARNESS="$CARGO_TARGET_DIR/release/jxl-xcheck"
@@ -59,9 +61,9 @@ HARNESS="$CARGO_TARGET_DIR/release/jxl-xcheck"
 
 # --- step 2: the frameprism release binary is current (the check-108.sh
 # step-2 pattern — no-op when check.sh's step 2 already built it) ---
-echo "--- build the tool (release; no-op when current) ---"
-if ! (cd "$REPO/tool" && cargo build --release); then
-  echo "FAIL check-xcheck: cargo build --release (tool) failed"
+echo "--- build the tool (release, --locked; no-op when current) ---"
+if ! (cd "$REPO/tool" && cargo build --release --locked); then
+  echo "FAIL check-xcheck: cargo build --release --locked (tool) failed (the committed lock is stale — re-resolve it in-tree and land the updated lock)"
   exit 1
 fi
 BIN="$CARGO_TARGET_DIR/release/frameprism"
