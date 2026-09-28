@@ -50,6 +50,38 @@ committed gates and documented behavior.
 - Atomic writes (temp + rename); named-frame failures → nonzero; bogus
   `--cjxl-bin` → rc=2 with ZERO files written.
 
+## Per-OS posture (the jxl binaries)
+
+The JXL tier shells out to the `cjxl`/`djxl` 0.12.0 binaries
+(version parity with the measured sizes — the `--pins` gate is the
+enforcement). The binaries are per-OS:
+
+| OS | binary source | when absent/unspawnable |
+|---|---|---|
+| macOS | the committed pin `deps/pinned-binaries/{cjxl,djxl}` — out of the box: `--cjxl-bin deps/pinned-binaries/cjxl` + `--djxl-bin deps/pinned-binaries/djxl`, `DYLD_FALLBACK_LIBRARY_PATH=deps/.jxl-libs` | the named refusal (rc=2, before the first byte) |
+| Linux / Windows | the host's `cjxl`/`djxl` 0.12.0 on PATH (or `--cjxl-bin`/`--djxl-bin`) | the named refusal (rc=2, before the first byte) |
+
+- **The named refusal**: a resolved binary that is absent or
+  unspawnable refuses the encode NAMED (rc=2) before the first byte —
+  no output dir, no ingest manifest, no ops-ledger row. The line
+  carries the fix per OS (the committed pin on macOS; the host build
+  elsewhere). A PRESENT binary of any version passes the probe — the
+  sidecar stamps the version it found; parity is enforced only by the
+  opt-in `--pins` gate.
+- **Windows encode boundary**: the encode path is unix-only — the
+  preflight's source scan (the (dev, ino) cycle guard) is the named
+  unix-only refusal on Windows (rc=2 before the first byte). The
+  check/audit/decode verbs never run the encode preflight and are
+  unaffected.
+- **BYO binaries (Linux/Windows)**: any host build of libjxl at the
+  pinned tag works with `--cjxl-bin`/`--djxl-bin`
+  (`deps/build-libjxl.sh` is the mac reference build). Distro packages
+  are UNPINNED — a system cjxl/djxl at a different version breaks the
+  version parity (the `--pins` gate is the enforcement; on macOS the
+  committed pin is always available).
+- This posture may change with a future release (the committed pin
+  currently covers macOS; the other hosts bring their own binaries).
+
 ## 10/8-bit scope
 
 `--codec jxl` covers the same scope as the j92 path: the shared
