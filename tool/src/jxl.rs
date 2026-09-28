@@ -530,7 +530,7 @@ pub fn reinterleave(planes: [&[u16]; 4], w: u32, h: u32) -> Vec<u16> {
 /// never starts a run — no ledger row), and the tests pin it.
 pub const BINARY_REFUSAL_PREFIX: &str = "jxl binary";
 
-/// The house named refusal for the absent/unspawnable cjxl/djxl
+/// The named refusal for the absent/unspawnable cjxl/djxl
 /// binary (the ≤2-line form): the tier's v0.12.0 parity requirement,
 /// the macOS committed-pin form, the Linux/Windows host-build form
 /// (the distro caveat + the `--pins` enforcement), and the per-OS
