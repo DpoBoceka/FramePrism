@@ -312,6 +312,9 @@ const ENCODE_USAGE_PREFIXES: &[&str] = &[
     // the clip-name derivation — no frame/byte was written, so NO
     // ledger row, the usage-class semantics).
     "resume:",
+    // the jxl binary refusal (the absent/unspawnable cjxl/djxl —
+    // the named rc=2 before the first byte: no run starts, no row).
+    frameprism::jxl::BINARY_REFUSAL_PREFIX,
     // the defensive both-dispatch invariant (never fires — the
     // both dispatch clones the tiers with the canonical codecs).
     "--codec both does not dispatch",

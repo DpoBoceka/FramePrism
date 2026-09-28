@@ -8,8 +8,12 @@ and `--downscale2x` (a 2× downscale — ~10:1 for proxies).
 
 Known limits (0.2.0): the distribution is the source + the release-page binaries (the
 Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
-(the gate toolchain); the MHL manifest's writer/parser is tested against the adversarial
-suite, round-trip with a third-party implementation not yet exercised.
+(the gate toolchain); the JXL tier's binaries are per-OS (macOS: the committed pin,
+out of the box; Linux/Windows: the host's cjxl/djxl 0.12.0 — a named refusal when
+absent); on Windows the encode path is the unix-only named refusal at the preflight
+(the check/audit/decode verbs are unaffected); the MHL manifest's writer/parser is
+tested against the adversarial suite, round-trip with a third-party implementation not
+yet exercised.
 
 ## Quick start
 
