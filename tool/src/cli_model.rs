@@ -296,7 +296,7 @@ pub(crate) struct Cli {
     pub(crate) subset: bool,
 
     /// The fp-camera frames ride the byte-exact source copy instead of
-    /// the transcode (the item-123 R0 ruling — the default is transcode:
+    /// the transcode (the R0 ruling — the default is transcode:
     /// the fp frame is decoded + re-encoded through the archive path so
     /// every output frame is in the measured archive contract). A
     /// no-op outside the fp-camera class (the raw-only behavior is

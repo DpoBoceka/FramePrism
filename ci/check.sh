@@ -13,7 +13,7 @@
 # Cargo.toml [lints.clippy] — silent on PASS), the README command-list
 # drift gate (the marker-delimited Commands block byte-diffed against
 # the built binary's `--help` — silent on PASS), the 10-frame synthetic
-# byte-identity oracle (72,325,126 B — the item-126 Stage-1
+# byte-identity oracle (72,325,126 B — the Stage-1
 # re-pin: the 482 grid's selection default flipped to the fixed
 # W7 candidate, the oracle10 goldens regenerated under the new
 # default) from the COMMITTED fixture in

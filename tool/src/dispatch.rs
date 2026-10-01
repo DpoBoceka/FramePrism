@@ -416,7 +416,7 @@ pub(crate) fn pin_gate(
     Ok(())
 }
 
-/// The item-126 Stage-1 flag-pair refusal (the `--fast` + `--trial`
+/// The Stage-1 flag-pair refusal (the `--fast` + `--trial`
 /// conflict — the named rc=2 wording, the exact byte the KAT pins):
 /// the two flags select conflicting per-tile selection contracts (the
 /// fixed single W7 candidate vs the base default's 3-candidate
@@ -517,7 +517,7 @@ pub(crate) fn dryrun_dispatch(cli: &Cli, input: &Path, output: &Path) -> ExitCod
         return ExitCode::from(2);
     }
     frameprism::dryrun::set_dryrun_flag(true);
-    // The `--trial` flag's dry-run site (the item-126 Stage-1 — the
+    // The `--trial` flag's dry-run site (the Stage-1 — the
     // estimate dispatches BEFORE the encode run's process-flag site,
     // the 123 carry note): the dry-run's sample encode reads the flag
     // through the process static (no `Opts` field — the estimate logic

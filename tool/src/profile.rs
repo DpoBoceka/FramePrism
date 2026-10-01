@@ -1,4 +1,4 @@
-//! The env-gated per-phase profiler (item 125 — the transcode-path
+//! The env-gated per-phase profiler (the transcode-path
 //! profile, the measurement surface): the `FRAMEPRISM_PROFILE=1` env
 //! gate (absent / other = INACTIVE — the default run is
 //! BYTE-IDENTICAL to the base: no timers written, no sidecar created,
@@ -26,11 +26,11 @@
 //! The phases (the stable string contract — the exact names):
 //! `read` (the worker path's source fs::read) · `fp-input-decode`
 //! (the 48 fp input tiles' decode, summed) · `fp-input-drill` (the
-//! 48 fp input tiles' re-encode + compare — the item-124 oracle
+//! 48 fp input tiles' re-encode + compare — the temporal-oracle
 //! consult inside — summed) · `source-synth` (the
 //! `fp_transcode_source` build) · `archive-encode` (the output
 //! frame's encode) · `archive-drill` (the output's bit-exact
-//! re-encode verify gate — the item-123 "archive bit-exact drill on
+//! re-encode verify gate — the "archive bit-exact drill on
 //! the output" — summed) · `fidelity-decode` (the transcode-fidelity
 //! check's output decode, summed) · `fidelity-compare` (the fidelity
 //! check's pixel compare). The RAW frame's row = `read`,
@@ -64,7 +64,7 @@ static ENV_READ: AtomicBool = AtomicBool::new(false);
 /// per-frame flush serializes on this mutex).
 static SIDECAR: Mutex<Option<BufWriter<std::fs::File>>> = Mutex::new(None);
 
-// The thread-local phase accumulator (the item-124 thread-local
+// The thread-local phase accumulator (the thread-local
 // pattern — the per-thread sums so the pool threads' frames never
 // interleave; the per-phase SUM: a tile loop that runs 48×
 // contributes one summed row).

@@ -246,7 +246,7 @@ pub struct CoreFrame {
     /// + the per-action verify gates read it).
     pub class: crate::frameclass::FrameClass,
     /// The per-frame action of the policy verdict (the provenance
-    /// record's `action` column — the item-123 R1: the transcoded
+    /// record's `action` column — the R1: the transcoded
     /// frame's class is the fp-camera class but its action is
     /// `Transcoded`, never `Carried` — the write layer's verify gate
     /// is action-keyed: the carried source-sha match applies to
@@ -277,17 +277,17 @@ pub struct MemFrame {
 // The per-frame policy table (the mixed-compression contract — the
 // class × mode table, the design's D3 move): the v1 row is the
 // MEASURED one (the lossless row — the raw class encodes as today,
-// byte-frozen); the fp-camera class's lossless cell is the item-123
-// R0 ruling: TRANSCODE by default (the fp frame is decoded through the
-// item-122 path + re-encoded through the existing archive path — every
+// byte-frozen); the fp-camera class's lossless cell is the R0
+// ruling: TRANSCODE by default (the fp frame is decoded through the
+// fp-camera lossless decode path + re-encoded through the existing archive path — every
 // output frame is in the measured, NLE-verified archive contract);
 // the `--carry` flag is the explicit opt-in for the byte-exact source
-// copy (the item-121 row — the provenance opt-in + the unproven-
+// copy (the carry row — the provenance opt-in + the unproven-
 // structure fallback; a no-op outside the fp-camera class, so the
 // raw-only behavior is untouched by construction); every other row =
 // the pinned named refusal (the `frameclass` wordings — the fp-camera
 // × {log10, lossy, downscale2x} rows are the v1 boundary, the log10/
-// ds2x × mixed-as-Transcode rows are LATER, not item 123; the archive
+// ds2x × mixed-as-Transcode rows are LATER; the archive
 // class is the decode/verify-verb class, the unknown class is the
 // named refusal). The dry-run sample dispatch mirrors this table (one
 // function, one contract).
@@ -301,11 +301,11 @@ pub enum FramePolicy {
     Encode,
     /// The byte-exact source copy (no pixel access — the carried
     /// frame's verify = the source-sha match, never a decode). The
-    /// `--carry` opt-in (the item-121 row, the provenance opt-in).
+    /// `--carry` opt-in (the carry row, the provenance opt-in).
     Carry,
-    /// The transcode (the item-123 R0 ruling — the fp-camera class's
+    /// The transcode (the R0 ruling — the fp-camera class's
     /// lossless cell, the default): decode the fp frame through the
-    /// item-122 path + re-encode through the existing archive path
+    /// fp-camera lossless decode path + re-encode through the existing archive path
     /// (the output is a frame in the tool's measured archive contract;
     /// the verify = the archive bit-exact drill on the output + the
     /// transcode-fidelity check — decode(output) == the decoded input
@@ -348,7 +348,7 @@ pub fn policy(
 }
 
 // =====================================================================
-// The `--carry` process-wide flag (the item-123 R0 ruling — the
+// The `--carry` process-wide flag (the R0 ruling — the
 // explicit opt-in for the fp-camera frames' byte-exact source copy
 // instead of the transcode default). The `subset_flag` / `resume`
 // pattern: `main` sets it before the dispatch; the encode path's
@@ -373,7 +373,7 @@ pub fn carry_flag() -> bool {
 }
 
 // =====================================================================
-// The `--trial` process-wide flag (the item-126 Stage-1 ruling — the
+// The `--trial` process-wide flag (the Stage-1 ruling — the
 // base default's per-tile size-min trial, BYTE-FROZEN, behind a flag;
 // the `--carry` precedent: the old behavior behind a flag). The 482
 // grid's SELECTION DEFAULT flipped to the fixed single W7 candidate
@@ -405,10 +405,10 @@ pub fn trial_flag() -> bool {
 }
 
 // =====================================================================
-// The fp temporal-oracle (item 124 — R2, the owner's ruling (a)) —
+// The fp temporal-oracle (R2, the owner's ruling (a)) —
 // the resolver builder + the census count plumbing
 // =====================================================================
-// The tile-local drill (the item-122 R4 site in decode.rs) refuses a
+// The tile-local drill (the R4 site in decode.rs) refuses a
 // whole-body-divergent fp tile (the camera encoder's non-canonical
 // whole-body lossless coding — 3/17,376 tiles measured, the
 // adjudication 2026-09-30) unless the thread-local oracle slot
@@ -422,7 +422,7 @@ pub fn trial_flag() -> bool {
 // full-nominal plane?" — the drill then accepts iff the planes match
 // within the pinned bound (`decode::FP_TEMPORAL_MAX_DELTA`).
 
-/// The fp temporal-oracle resolver builder (item 124 — R2): the
+/// The fp temporal-oracle resolver builder (R2): the
 /// per-frame ctx the fp TRANSCODE path's callers set around a
 /// frame's encode measurement. The resolver closure walks the
 /// frame's ordinal ± 2k outward (k = 1, 2, … — the fp frames are the
@@ -452,7 +452,7 @@ pub fn trial_flag() -> bool {
 /// drill — the safe direction: a mismatched name resolves `None` and
 /// the refusal stands).
 ///
-/// The oracle's neighbor read cache (item 124 — the R2 contract's
+/// The oracle's neighbor read cache (the R2 contract's
 /// read-only side): neighbor absolute path → the file bytes
 /// (`None` = the read failed — the candidate is rejected); each
 /// neighbor frame is read at most once per frame.
@@ -616,7 +616,7 @@ pub(crate) fn fp_temporal_resolver(
     }
 }
 
-/// The resolver's single-tile read + verify (item 124 — R2): the
+/// The resolver's single-tile read + verify (R2): the
 /// neighbor frame's tile `tile_idx` decoded through the product's own
 /// drill core. `None` = the candidate is not a verified neighbor (the
 /// read / parse / geometry / drill failed at any step — the safe
@@ -685,7 +685,7 @@ fn neighbor_tile_plane(
 }
 
 // =====================================================================
-// The per-frame fp temporal-verified count (item 124 — R4 — the
+// The per-frame fp temporal-verified count (R4 — the
 // census count plumbing)
 // =====================================================================
 // The clip's census term (`· temporal-verified {n}`) source: the
@@ -701,7 +701,7 @@ static FP_TEMPORAL_VERIFIED: std::sync::OnceLock<
     std::sync::Mutex<std::collections::BTreeMap<String, usize>>,
 > = std::sync::OnceLock::new();
 
-/// Note a frame's oracle-verified tile count (item 124 — R4): the
+/// Note a frame's oracle-verified tile count (R4): the
 /// process_dir write site (the frame's ctx counter, read before the
 /// ctx clear — the same thread). The note replaces any earlier value
 /// for the key (a frame encodes once per run — the resume-skip
@@ -714,7 +714,7 @@ pub(crate) fn note_fp_temporal_verified(rel: &str, n: usize) {
         .insert(rel.to_string(), n);
 }
 
-/// Claim a frame's oracle-verified tile count (item 124 — R4): the
+/// Claim a frame's oracle-verified tile count (R4): the
 /// report's census write site (per sidecar row key — the same key
 /// the frameclass provenance claim uses). Absent = 0 (the 123 shape
 /// — no term, byte-frozen).
@@ -820,7 +820,7 @@ fn encode_core(
     carry: bool,
     verify_ms: &mut f64,
 ) -> Result<CoreFrame> {
-    //: The item-125 profile phase (`read` — the source file's fs::read,
+    //: The profile phase (`read` — the source file's fs::read,
     // the worker path's read site; the guard is a checked no-op at the
     // gate OFF):
     let buf = {
@@ -871,7 +871,7 @@ fn encode_core(
             // The raw class — the existing path, byte-frozen.
         }
         FramePolicy::Carry => {
-            // The Carry (the item-121 row — the `--carry` opt-in):
+            // The Carry (the carry row — the `--carry` opt-in):
             // the source bytes pass through untouched — the frame is
             // the output.
             let len = buf.len() as u64;
@@ -888,9 +888,9 @@ fn encode_core(
             });
         }
         FramePolicy::Transcode => {
-            // The Transcode (the item-123 R0 ruling — the fp-camera ×
+            // The Transcode (the R0 ruling — the fp-camera ×
             // lossless cell, the default): the frame is DECODED through
-            // the item-122 shipped path (the R4 bounded-tail drill
+            // the fp-camera lossless decode path (the R4 bounded-tail drill
             // gates the INPUT — a corrupt fp frame is a loud named
             // refusal here, before any encode) and RE-ENCODED through
             // the existing archive path below (the synthetic raw-
@@ -918,7 +918,7 @@ fn encode_core(
         match verdict {
             FramePolicy::Transcode => {
                 let (tw, th, plane) = crate::decode::decode_j92_frame(&buf, &file_name)?;
-                // The item-125 profile phase (`source-synth` — the
+                // The profile phase (`source-synth` — the
                 // `fp_transcode_source` synthetic raw-equivalent buffer
                 // build; the guard is a checked no-op at the gate OFF):
                 let (syn_buf, syn_frame) = {
@@ -968,7 +968,7 @@ fn encode_core(
     // the same DNG nominal convention the pack12 12-bit rule verified
     // pixel-exact — big-endian word, MSB-first, trailing padding
     // ignored). The transcode's samples are the DECODED plane (the
-    // item-122 path — the strip unpack is the raw arm's; the seam's
+    // fp-camera lossless decode path — the strip unpack is the raw arm's; the seam's
     // match above carries both).
     // (c)+(a): the single-pass decoded-plane stats (the exposure
     // min/max/mean + the black/blank variance) — they RIDE this unpack
@@ -1850,7 +1850,7 @@ fn encode_core(
             // (FRAMEPRISM_ENGINE) and even-pad as the adaptive path; bit-exact
             // lossless either way (verify is decode-side and orientation-
             // agnostic).
-            // The item-126 Stage-1 selection-default flip (the 482 grid):
+            // The Stage-1 selection-default flip (the 482 grid):
             // the no-flag default routes through this same `--fast`
             // selection (the family's fixed W7 head — `encode_tile_fast`);
             // `--trial` restores the base default's size-min trial
@@ -1867,7 +1867,7 @@ fn encode_core(
             if use_fast {
                 for r in 0..grid.rows {
                     for c in 0..grid.cols {
-                        // The item-125 profile phase (`archive-encode` —
+                        // The profile phase (`archive-encode` —
                         // the output frame's encode, the per-tile call
                         // sites summed; the guard is a checked no-op at
                         // the gate OFF):
@@ -1889,7 +1889,7 @@ fn encode_core(
             }
             let mut stats = None;
             if verify {
-                // The item-125 profile phase (`archive-drill` — the
+                // The profile phase (`archive-drill` — the
                 // output's bit-exact re-encode verify (the verify
                 // gate's drill), summed over its call sites; the guard
                 // is a checked no-op at the gate OFF):
@@ -1914,7 +1914,7 @@ fn encode_core(
                 }
             }
             let ds = downscale.then(|| build_ds2x(&buf, &frame)).transpose()?;
-            // The item-125 profile phase (`archive-encode` — the output
+            // The profile phase (`archive-encode` — the output
             // frame's encode, the surgery call site):
             let out = {
                 let _pe = crate::profile::phase("archive-encode").start();
@@ -1939,7 +1939,7 @@ fn encode_core(
             };
             if verify {
                 let _tv = Instant::now();
-                // The item-125 profile phase (`archive-drill` — the
+                // The profile phase (`archive-drill` — the
                 // metadata gate half of the verify drill, summed with
                 // the content gate's site):
                 let _pd = crate::profile::phase("archive-drill").start();
@@ -2018,25 +2018,25 @@ fn encode_core(
         (out, None, None, None, None)
     };
 
-    //: the TRANSCODE-FIDELITY check (the item-123 R1, verify (b)):
+    //: the TRANSCODE-FIDELITY check (the R1, verify (b)):
     // the transcoded frame's verify is (a) the archive bit-exact drill
     // on the output (the existing encoded-row verify — the branch's
     // `bit_exact_tiled_plane` + `metadata_preserved_tiled`, unchanged)
     // + (b) this: decode the OUTPUT through the archive path (the
-    // item-122 decode — the W7/W2/N1 restore drills ride inside) and
+    // fp-camera lossless decode — the W7/W2/N1 restore drills ride inside) and
     // require PIXEL-EXACTNESS with the decoded input plane. The
     // input's fp bytes differ from the output's bytes by design (the
     // transcode re-encodes through our codec) — the check is
     // semantic (the u16 plane), named in the row.
     if let Some(in_plane) = tc_in {
         let _tv = Instant::now();
-        // The item-125 profile phase (`fidelity-decode` — the
+        // The profile phase (`fidelity-decode` — the
         // transcode-fidelity check's output decode, summed):
         let (ow, oh, out_plane) = {
             let _pd = crate::profile::phase("fidelity-decode").start();
             crate::decode::decode_j92_frame(&out.bytes, &file_name).map_err(vctx)?
         };
-        // The item-125 profile phase (`fidelity-compare` — the pixel
+        // The profile phase (`fidelity-compare` — the pixel
         // compare of the fidelity check):
         let mismatch = {
             let _pc = crate::profile::phase("fidelity-compare").start();
@@ -2126,17 +2126,17 @@ pub(crate) fn run(
     // key the encode was called with; a written frame is a processed
     // frame: the action is the policy verdict's executed form —
     // encoded (the raw class) / carried (the `--carry` opt-in) /
-    // transcoded (the item-123 R0 ruling — the fp-camera class's
+    // transcoded (the R0 ruling — the fp-camera class's
     // default, the `transcoded:fp-hardware` D4 vocabulary)).
     if let Some(qc_rel) = qc_rel {
         crate::frameclass::note_frame_action(qc_rel, cf.class, cf.action);
     }
     //: the carried frame's verify gate (the mixed-compression
-    // contract, action-keyed since the item-123 Transcode cell): a
+    // contract, action-keyed since the Transcode cell): a
     // CARRIED frame's verify = the source-sha match — the bytes on
     // disk must equal the source bytes byte-for-byte (never a decode;
-    // the decode-side verify of a carried frame is the item-122
-    // scope). The write is the tmp+rename byte-exact copy — a
+    // the decode-side verify of a carried frame is the fp-camera
+    // lossless decode's scope). The write is the tmp+rename byte-exact copy — a
     // mismatch means the disk write corrupted the copy (the named
     // verify-gate refusal, the `verify: ` class prefix). The
     // TRANSCODED frame's verify is NOT this (its output differs from
@@ -2148,7 +2148,7 @@ pub(crate) fn run(
         let src_sha = crate::jxl::sha256_hex(&cf.bytes);
         if sha != src_sha {
             anyhow::bail!(
-                "verify: carried frame {} is not byte-identical to the source (the carried frame's verify = the source-sha match: the carried sha {} ≠ the source sha {} — never a decode; the decode-side verify is the item-122 scope)",
+                "verify: carried frame {} is not byte-identical to the source (the carried frame's verify = the source-sha match: the carried sha {} ≠ the source sha {} — never a decode; the decode-side verify is the fp-camera lossless decode's scope)",
                 dst.file_name().unwrap_or_default().to_string_lossy(),
                 sha,
                 src_sha
@@ -2223,7 +2223,7 @@ pub fn encode_frame_memory(
 }
 
 // =====================================================================
-// The fp-camera Transcode source synthesis (the item-123 R1 — the (T)
+// The fp-camera Transcode source synthesis (the R1 — the (T)
 // ruling cell's encode seam): the fp frame's OWN IFD0 metadata (the
 // camera identity, the per-frame TimeCodes, the exposure, the ExifIFD
 // + sub-IFDs — everything the archive contract carries) is re-laid
@@ -6199,7 +6199,7 @@ mod tests {
                 assert_eq!(
                     policy(fc::FrameClass::FpCameraLossless, mode, ds, carry),
                     FramePolicy::RefuseNamed,
-                    "fp × ({mode:?}, ds {ds}) × carry {carry}: the v1 boundary row (the log10/ds2x × mixed-as-Transcode rows are LATER, not item 123)"
+                    "fp × ({mode:?}, ds {ds}) × carry {carry}: the v1 boundary row (the log10/ds2x × mixed-as-Transcode rows are LATER)"
                 );
             }
             // archive + unknown: RefuseNamed on every row (carry-invariant).
@@ -6303,7 +6303,7 @@ mod tests {
     /// ARCHIVE FRAME (482×272 × 64, 259 = 7) + decode(output) ==
     /// decode(input) PIXEL-EXACT (the transcode-fidelity check the
     /// verify pass runs in `encode_core`) + the canary plane
-    /// re-asserted on the OUTPUT plane (the item-120/122 pins,
+    /// re-asserted on the OUTPUT plane (the conformance KAT's pins,
     /// re-derived here on the transcoded output — a delta is a STOP
     /// finding) + the provenance row (the `transcoded` action, the
     /// D4 vocabulary) + the resume-skip semantics (the re-run with
@@ -6370,15 +6370,15 @@ mod tests {
         assert_eq!(e.u32(&find(323).expect("323 present").value_raw), 272, "the output TileLength = 272 (the archive grid)");
         assert_eq!(find(324).expect("324 present").count, 64, "the output tile count = 64 (the 482×272 × 3856×2170 grid)");
         // (c) The transcode-fidelity: decode(output) == decode(input)
-        // PIXEL-EXACT (the item-122 decode on both — the archive drill
+        // PIXEL-EXACT (the fp-camera lossless decode on both — the archive drill
         // on the output rides inside).
-        let (w_in, h_in, p_in) = crate::decode::decode_j92_frame(&src_bytes, "fp-in").expect("the fp input decodes (the item-122 path)");
+        let (w_in, h_in, p_in) = crate::decode::decode_j92_frame(&src_bytes, "fp-in").expect("the fp input decodes (the fp-camera lossless decode path)");
         let (w_out, h_out, p_out) = crate::decode::decode_j92_frame(&out, "fp-out").expect("the transcoded output decodes (the archive path)");
         assert_eq!((w_in, h_in), (3856, 2170), "the fp input geometry");
         assert_eq!((w_out, h_out), (3856, 2170), "the output geometry (the UHD readout)");
         assert_eq!(p_in, p_out, "the transcode is pixel-exact: decode(output) == decode(input)");
         // (d) The canary plane re-asserted on the OUTPUT plane (the
-        // item-120/122 pins — re-declared here on the transcoded
+        // the conformance KAT's canary pins — re-declared here on the transcoded
         // output; a delta is a STOP finding):
         const FP_PIN_MIN: u16 = 256;
         const FP_PIN_MAX: u16 = 4095;
@@ -6397,7 +6397,7 @@ mod tests {
             "the transcoded output's plane mean {mean} drifted from ~{FP_PIN_MEAN}"
         );
         // The 2×2 CFA class means over the interior (the boundary
-        // ring excluded — the item-122 canary's apples-to-apples form):
+        // ring excluded — the canary's apples-to-apples form):
         let wz = 3856usize;
         let hz = 2170usize;
         let mut csum = [[0u64; 2]; 2];
@@ -6427,7 +6427,7 @@ mod tests {
         // re-run with `--resume` + the checksums sidecar skips every
         // row (the transcoded rows via the existing output-sha row
         // mechanism) with the output bytes unchanged.
-        // NOTE the sticky flag sets: `set_subset_flag` (the item-121
+        // NOTE the sticky flag sets: `set_subset_flag` (the carry
         // documented sticky set — safe: no test asserts continuity
         // via process_dir) + `resume::set_flag(true)` (the ONCE
         // semantics — set TRUE here, never false: a fresh-dir resume
@@ -6532,11 +6532,11 @@ mod tests {
     /// default: all 3 outputs archive-class, 0 carried — the census
     /// `fp-camera-lossless 2 (encoded 0 · carried 0 · transcoded 2)`;
     /// the fp provenance rows = `transcoded`. `--carry`: the 2 fp
-    /// byte-exact + the 1 raw encoded — the item-121 structure, the
+    /// byte-exact + the 1 raw encoded — the carry structure, the
     /// census `(encoded 0 · carried 2)`. The dry-run reports BOTH
     /// estimates (both flag values — the md record's both-estimates
     /// line + the census line). The raw-only A001_001 clip under the
-    /// default: the census line byte-identical to the item-121 form
+    /// default: the census line byte-identical to the carry form
     /// (the byte-freeze — no `both estimates` line, no `transcoded`
     /// term). Corpus-conditional.
     #[test]
@@ -6637,7 +6637,7 @@ mod tests {
         let report_c = std::fs::read_to_string(out_c.join("A001_013.frameprism-report.md")).expect("the report (--carry)");
         assert!(
             report_c.contains("class census: raw-uncompressed 1 (encoded 1 · carried 0) · fp-camera-lossless 2 (encoded 0 · carried 2)"),
-            "(--carry): the census (the item-121 structure — 2 carried):\n{report_c}"
+            "(--carry): the census (the carry structure — 2 carried):\n{report_c}"
         );
         for n in ["A001_013_20260930_000001.DNG", "A001_013_20260930_000723.DNG"] {
             assert_eq!(
@@ -6684,7 +6684,7 @@ mod tests {
             if carry {
                 assert!(
                     md.contains(&format!("projected carried (the fp-camera lossless frames — the byte copy, no re-encode): 2 frame(s) — {carried_bytes} B")),
-                    "the carried line (the item-121 form, the --carry scenario):\n{md}"
+                    "the carried line (the carry form, the --carry scenario):\n{md}"
                 );
             } else {
                 assert!(
@@ -6716,7 +6716,7 @@ mod tests {
         let md = std::fs::read_to_string(tmp.join("dry-r.md")).expect("the raw-only record");
         assert!(
             md.contains("class census: A001_001 — raw-uncompressed 3 (carried bytes 0)"),
-            "the raw-only census line (the item-121 form — byte-frozen):\n{md}"
+            "the raw-only census line (the carry form — byte-frozen):\n{md}"
         );
         assert!(
             !md.contains("both estimates"),
@@ -6727,7 +6727,7 @@ mod tests {
             "the raw-only record has NO transcoded term (byte-frozen):\n{md}"
         );
         // The encode-run byte-freeze surface (the census line under
-        // the default — the raw-only clip's item-121 form):
+        // the default — the raw-only clip's carry form):
         let out_r = tmp.join("out-r");
         let rep_r = process_dir(
             raw,
@@ -6752,7 +6752,7 @@ mod tests {
         let report_r = std::fs::read_to_string(out_r.join("A001_001.frameprism-report.md")).expect("the raw-only report");
         assert!(
             report_r.contains("class census: raw-uncompressed 3 (encoded 3 · carried 0)"),
-            "the raw-only census line (the item-121 form — byte-frozen):\n{report_r}"
+            "the raw-only census line (the carry form — byte-frozen):\n{report_r}"
         );
         assert!(
             !report_r.contains("frameclass — the per-frame provenance"),
@@ -6762,7 +6762,7 @@ mod tests {
     }
 
     // =====================================================================
-    // The item-124 KATs (the fp temporal-oracle class — the owner's
+    // The temporal-oracle KATs (the fp temporal-oracle class — the owner's
     // ruling (a)). The corpus = the `A001_013_miniclips` mirror (the
     // PM-prepared 124 KAT corpus — the three mini-clip sets + f279;
     // the 121/123 `A001_013` mirror stays the 3 standing frames and
@@ -7126,7 +7126,7 @@ mod tests {
                 "the disputed frame's provenance row (action transcoded):\n{report}"
             );
             assert!(
-                report.contains("the temporal-verified tile's verify = the decoded plane matched the decoded same-class neighbor's tile plane within the pinned bound (FP_TEMPORAL_MAX_DELTA = 256 — the whole-body drill divergence, the item-124 class)"),
+                report.contains("the temporal-verified tile's verify = the decoded plane matched the decoded same-class neighbor's tile plane within the pinned bound (FP_TEMPORAL_MAX_DELTA = 256 — the whole-body drill divergence, the temporal-oracle class)"),
                 "the provenance note clause is present:\n{report}"
             );
             // The disputed output = a VALID ARCHIVE FRAME (the
@@ -7306,16 +7306,16 @@ mod tests {
     /// KAT 3 — `kat_fp_temporal_oracle_byte_freeze` (corpus-
     /// conditional, the 123 pattern): the raw-only A001_001 3-frame
     /// clip (the symlink mirror — the 3 frames are members of the
-    /// 225): the encode census line in the item-123 shape with NO
+    /// 225): the encode census line in the raw-only shape with NO
     /// temporal-verified term, NO provenance section, NO both-
     /// estimates line (the raw-only shape BYTE-FROZEN under the
-    /// lane); the raw-only dry-run surface in the item-123 shape (no
+    /// lane); the raw-only dry-run surface in the raw-only shape (no
     /// new lines); the `--help` surface assertion = the flag-
     /// declaration census over the CLI surface's source (the
     /// `#[arg(long` sites in the CLI model + the subcommand root) +
     /// the README's pinned Commands block (the doc-drift gate's
     /// byte-diff target) carries no temporal/oracle vocabulary.
-    /// Re-pointed at the item-126 Stage-1 (the selection-default
+    /// Re-pointed at the Stage-1 (the selection-default
     /// flip): the ONLY new flag in the CLI model is `--trial` (the
     /// byte-frozen trial opt-in — the census re-pin 28 → 29);
     /// the subcommand root (10) + the README's Commands block stay
@@ -7373,7 +7373,7 @@ mod tests {
             std::fs::read_to_string(out.join("A001_001.frameprism-report.md")).expect("the raw-only report");
         assert!(
             report.contains("class census: raw-uncompressed 3 (encoded 3 · carried 0)"),
-            "the raw-only census line (the item-123 shape — byte-frozen):\n{report}"
+            "the raw-only census line (the raw-only shape — byte-frozen):\n{report}"
         );
         assert!(
             !report.contains("temporal-verified"),
@@ -7383,7 +7383,7 @@ mod tests {
             !report.contains("frameclass — the per-frame provenance"),
             "the raw-only clip has NO provenance section (byte-frozen):\n{report}"
         );
-        // --- the raw-only dry-run surface (the item-123 shape — no
+        // --- the raw-only dry-run surface (the raw-only shape — no
         // new lines, no term, no both-estimates):
         let o = crate::dryrun::Opts {
             dest: tmp.join("dry-r"),
@@ -7406,7 +7406,7 @@ mod tests {
         let md = std::fs::read_to_string(tmp.join("dry-r.md")).expect("the raw-only record");
         assert!(
             md.contains("class census: A001_001 — raw-uncompressed 3 (carried bytes 0)"),
-            "the raw-only census line (the item-123 shape — byte-frozen):\n{md}"
+            "the raw-only census line (the raw-only shape — byte-frozen):\n{md}"
         );
         assert!(
             !md.contains("temporal-verified"),
@@ -7420,7 +7420,7 @@ mod tests {
             !md.contains("transcoded"),
             "the raw-only record has NO transcoded term (byte-frozen):\n{md}"
         );
-        // --- the `--help` surface (the item-126 Stage-1 re-point —
+        // --- the `--help` surface (the Stage-1 re-point —
         // the ONLY new flag in the CLI model is `--trial`):
         // the in-process form = the flag-declaration census over the
         // CLI surface's source (the `#[arg(long` sites in the CLI
@@ -7435,12 +7435,12 @@ mod tests {
         assert_eq!(
             count_arg(&cli_model),
             29,
-            "the CLI model's flag census (the 891906d base of 28 + the item-126 Stage-1's --trial ONLY — the re-pin)"
+            "the CLI model's flag census (the pre-Stage-1 base of 28 + the Stage-1's --trial ONLY — the re-pin)"
         );
         assert_eq!(
             count_arg(&main_rs),
             10,
-            "NO new CLI flag at the subcommand root (the 891906d census — the --trial flag is a root-level encode flag)"
+            "NO new CLI flag at the subcommand root (the pre-Stage-1 census — the --trial flag is a root-level encode flag)"
         );
         let readme = std::fs::read_to_string("../README.md").expect("the README reads");
         let begin = readme.find("frameprism-help-commands:begin").expect("the README's help block begins");
@@ -7455,7 +7455,7 @@ mod tests {
     }
 
     // =====================================================================
-    // item 126 — the Stage-1 fast-default flip (the 482 grid's selection
+    // The Stage-1 fast-default flip (the 482 grid's selection
     // default → the fixed single W7 candidate — today's `--fast`
     // behavior; the base default's size-min trial, BYTE-FROZEN, on
     // `--trial`). The five KATs (the suite 600 → 605 — the M1-gated
@@ -7471,7 +7471,7 @@ mod tests {
     /// clip — the fp-decoded planes + the raw — + the A001_001 raw clip)
     /// under the Stage-1 default (NO flag): every frame encodes Done
     /// with the per-frame VERIFY gate (the decode-bit-exact oracle —
-    /// decode(output) == the source plane, the item-122 decode on the
+    /// decode(output) == the source plane, the fp-camera lossless decode on the
     /// fp frames / the strip unpack on the raw frames, re-asserted
     /// EXPLICITLY below), and the output structure is the 482 grid
     /// contract UNCHANGED by the flip (259 = 7 · 258 = 12 · 322 = 482
@@ -7545,14 +7545,14 @@ mod tests {
                 assert_eq!(e.u32(&find(323).expect("323").value_raw), 272, "{n}: TileLength 272 (the archive grid)");
                 assert_eq!(find(324).expect("324").count, 64, "{n}: the 482×272 × 3856×2170 tile count = 64");
                 // (b) The decode-bit-exact canary, re-asserted
-                // EXPLICITLY (the item-122 decode on the fp frames /
+                // EXPLICITLY (the fp-camera lossless decode on the fp frames /
                 // the strip unpack on the raw frames — the transcode
                 // KAT's fidelity check):
                 let (w, h, p_out) = crate::decode::decode_j92_frame(&outb, "out").expect("the output decodes");
                 assert_eq!((w, h), (3856, 2170), "{n}: the output geometry (the UHD readout)");
                 let p_in = match crate::tiff::read(&buf) {
                     Ok(f) => crate::pack12::unpack12(f.strip_slice(&buf), f.width, f.height).expect("the raw unpack"),
-                    Err(_) => crate::decode::decode_j92_frame(&buf, "in").expect("the fp input decodes (the item-122 path)").2,
+                    Err(_) => crate::decode::decode_j92_frame(&buf, "in").expect("the fp input decodes (the fp-camera lossless decode path)").2,
                 };
                 assert_eq!(p_out, p_in, "{n}: the decode-bit-exact canary (decode(output) == the source plane, pixel-exact)");
             }
@@ -7704,7 +7704,7 @@ mod tests {
 
     /// KAT 4 — `kat_fastdefault_trial_byte_freeze` (the byte-frozen
     /// contract): the `--trial` output over the 6 corpus frames is
-    /// BYTE-IDENTICAL to the base 1eb7a78 no-flag output (the base
+    /// BYTE-IDENTICAL to the base no-flag output (the base
     /// default's trial, the reference-product byte-parity contract at
     /// the measured 2.67× workload factor — the Stage-1 flip's named
     /// give-up, now the flag's contract). Pinned in-process by the
@@ -7719,7 +7719,7 @@ mod tests {
         let _g = crate::ENV_LOCK.lock().expect("env lock");
         camera_profile_override();
         crate::worker::set_carry_flag(false);
-        // The base 1eb7a78 no-flag (trial) output goldens — the
+        // The base no-flag (trial) output goldens — the
         // (name, MD5, size) set (the sha256 set in the lane's
         // report.md):
         const GOLDENS: [(&str, [u8; 16], u64); 6] = [
@@ -7785,12 +7785,12 @@ mod tests {
                 assert_eq!(
                     md5::compute(&outb).0,
                     g.1,
-                    "{n}: the --trial output's MD5 drifted from the base 1eb7a78 no-flag output (the byte-frozen contract)"
+                    "{n}: the --trial output's MD5 drifted from the base no-flag output (the byte-frozen contract)"
                 );
                 assert_eq!(
                     outb.len() as u64,
                     g.2,
-                    "{n}: the --trial output's size drifted from the base 1eb7a78 no-flag output (the byte-frozen contract)"
+                    "{n}: the --trial output's size drifted from the base no-flag output (the byte-frozen contract)"
                 );
                 // The 482 grid structure (the trial output = the 0.1.0
                 // adaptive shape — the census rides the byte-freeze):
@@ -7927,7 +7927,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    /// item 125 — the per-phase profiler's sidecar contract (the
+    /// The per-phase profiler's sidecar contract (the
     /// env-gated measurement surface — the stable phase-string
     /// contract + the gate-OFF byte-freeze). Corpus-conditional on
     /// the mirrored A001_013 (the 3 standing frames — f000001 fp /

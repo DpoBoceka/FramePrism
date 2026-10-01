@@ -840,16 +840,16 @@ pub fn write_reports(
             std::collections::BTreeMap::new();
         let mut car_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
             std::collections::BTreeMap::new();
-        // The per-class transcoded split (the item-123 R0 ruling — the
+        // The per-class transcoded split (the R0 ruling — the
         // fp-camera class's lossless cell, the default): the census's
         // per-run action split gains the transcoded term ONLY when a
         // class has transcoded frames > 0 (the raw-only + the
-        // `--carry`-mixed lines stay byte-identical to the item-121
+        // `--carry`-mixed lines stay byte-identical to the carry
         // forms — the byte-freeze clause).
         let mut trans_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
             std::collections::BTreeMap::new();
         let mut carried_bytes = 0u64;
-        // The clip's oracle-verified tile count (item 124 — R4, the
+        // The clip's oracle-verified tile count (R4, the
         // census term's source): the sum of the per-frame claims (the
         // process_dir write site's notes — the frame's ctx counter
         // read before the clear; absent = 0 — the raw class / the
@@ -877,7 +877,7 @@ pub fn write_reports(
                         .unwrap_or_default()
                 });
             let rel_key = dst_rel(output, dst);
-            // The frame's oracle-verified tile count (item 124 — the
+            // The frame's oracle-verified tile count (the
             // claim is unconditional over the clip's frames; the
             // absent key = 0 — the 123 shape stands).
             temporal_verified_total +=
@@ -956,7 +956,7 @@ pub fn write_reports(
                 if *cl == crate::frameclass::FrameClass::FpCameraLossless
                     && temporal_verified_total > 0
                 {
-                    // The item-124 census term (the clip's oracle-
+                    // The temporal-verified census term (the clip's oracle-
                     // verified whole-body tile count — the 123
                     // `· transcoded {t}` pattern; ONLY when n > 0 —
                     // the raw-only + the no-verified-neighbor shapes
@@ -1169,10 +1169,10 @@ pub fn write_reports(
         // the write-site streaming read, the named absence). The
         // carried frame's verify is the source-sha match (never a
         // decode — the decode-side verify of a carried frame is the
-        // item-122 scope); the transcoded frame's verify is the
+        // fp-camera lossless decode's scope); the transcoded frame's verify is the
         // archive bit-exact drill on the output + the transcode-
         // fidelity check (decode(output) == the decoded input plane,
-        // pixel-exact — the item-123 R1); the encoded frame's verify
+        // pixel-exact — the R1); the encoded frame's verify
         // is the existing bit-exact round-trip.
         let carried_total: u64 = car_count.values().sum();
         let transcoded_total: u64 = trans_count.values().sum();
@@ -1182,7 +1182,7 @@ pub fn write_reports(
             for (rel, cl, action, sha) in &prov {
                 md.push_str(&format!("{rel}\t{}\t{}\t{sha}\n", cl.name(), action));
             }
-            md.push_str("note: the carried frame's verify = the source-sha match (the byte copy — never a decode; the decode-side verify of a carried frame is the item-122 scope) · the transcoded frame's verify = the archive bit-exact drill on the output + the transcode-fidelity check (decode(output) == the decoded input plane, pixel-exact — the output differs from the source by design) · the temporal-verified tile's verify = the decoded plane matched the decoded same-class neighbor's tile plane within the pinned bound (FP_TEMPORAL_MAX_DELTA = 256 — the whole-body drill divergence, the item-124 class) · the encoded frame's verify = the existing bit-exact round-trip · the sha = the source bytes (the read-site registry claim, the write-site streaming fallback, the named absence `-`)\n");
+            md.push_str("note: the carried frame's verify = the source-sha match (the byte copy — never a decode; the decode-side verify of a carried frame is the fp-camera lossless decode's scope) · the transcoded frame's verify = the archive bit-exact drill on the output + the transcode-fidelity check (decode(output) == the decoded input plane, pixel-exact — the output differs from the source by design) · the temporal-verified tile's verify = the decoded plane matched the decoded same-class neighbor's tile plane within the pinned bound (FP_TEMPORAL_MAX_DELTA = 256 — the whole-body drill divergence, the temporal-oracle class) · the encoded frame's verify = the existing bit-exact round-trip · the sha = the source bytes (the read-site registry claim, the write-site streaming fallback, the named absence `-`)\n");
         }
         let path = output.join(per_clip_report_name(&c.clip));
         std::fs::write(&path, md)
@@ -2250,9 +2250,9 @@ mod tests {
         // complement: the ENCODE path's contract (the pre-sample
         // census + the policy dispatch) is exercised in full.
         crate::worker::set_subset_flag(true);
-        // The item-123 R0 ruling moved this test's behavior: the fp ×
+        // The R0 ruling moved this test's behavior: the fp ×
         // lossless cell is now the TRANSCODE default; the assertions
-        // below describe the `--carry` opt-in (the item-121 contract,
+        // below describe the `--carry` opt-in (the carry contract,
         // kept verbatim) — the process-wide flag is set explicitly
         // (the ruling-moved rewire; every assertion unchanged; the
         // sticky set is safe — no other test encodes a mixed clip,
@@ -2355,7 +2355,7 @@ mod tests {
         );
         assert!(
             t.contains("the carried frame's verify = the source-sha match"),
-            "the verify-semantics note (the decode-side verify is the item-122 scope):\n{t}"
+            "the verify-semantics note (the decode-side verify is the fp-camera lossless decode's scope):\n{t}"
         );
 
         // The ingest manifest's per-clip `clip_class:` line (the

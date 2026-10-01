@@ -161,7 +161,7 @@ pub struct IfdEntry {
 #[derive(Clone, Debug)]
 pub struct IfdTable {
     /// File offset of the 16-bit entry-count word. For the fp-camera
-    /// frames (item 122) this IS the tile-blob-ends-at datum: the fp
+    /// frames this IS the tile-blob-ends-at datum: the fp
     /// frame's IFD occupies the file tail, so the tile blob must end
     /// EXACTLY at this offset (the R2 class-keyed container check reads
     /// `meta.ifd0.off` — no separate `Meta.ifd0_offset` field, the M0

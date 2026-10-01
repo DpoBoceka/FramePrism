@@ -611,10 +611,10 @@ mod env_compat_tests {
             );
         }
         // The keep-anchors: the 20 recorded keep sites (the C/D/
-        // exe-self-sha class + the two item-121 sanctioned full-file
+        // exe-self-sha class + the two sanctioned full-file
         // fallback reads — the PM-ruled pre-pass exception + the
         // frame-class scan's `BadIfdOffset` fallback; each fires its
-        // named note line beside the read — + the item-124 oracle
+        // named note line beside the read — + the temporal-oracle
         // neighbor read, silent by design) are in place.
         let anchors: [(&str, &str); 20] = [
             (include_str!("bake.rs"), "std::fs::read(output.join(&r.manifest_name))"),
@@ -633,12 +633,12 @@ mod env_compat_tests {
             (include_str!("provenance.rs"), "std::fs::read(&args.manifest) {"),
             (include_str!("reel.rs"), "std::fs::read(&p) {"),
             (include_str!("worker/encode.rs"), "std::fs::read(src).with_context(|| format!(\"read {}\", src.display()))?;"),
-            // The item-124 fp temporal-oracle neighbor read (the R2
+            // The fp temporal-oracle neighbor read (the R2
             // contract: the resolver's read-only, per-clip-cached
             // read of the temporal neighbor's source frame — the
             // disputed tile is accepted only against this neighbor's
             // drill-verified same-tile plane within the pinned bound).
-            // SILENT by design: unlike the item-121 keeps it fires no
+            // SILENT by design: unlike the sanctioned keeps it fires no
             // named note line — a refused drill still emits the
             // EXISTING wording (the byte-freeze requires
             // encode/stdout silence on success).

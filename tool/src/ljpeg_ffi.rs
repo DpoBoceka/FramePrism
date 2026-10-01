@@ -125,9 +125,9 @@ extern "C" {
 
 #[cfg(test)]
 mod tests {
-    //! The fp-structure conformance KAT (item 120) — the durable,
+    //! The fp-structure conformance KAT — the durable,
     //! committed, camera-free form of the 2026-09-30 conformance probe
-    //! (the scratch probe + its renders live in the item-120 lane
+    //! (the scratch probe + its renders live in the lane
     //! evidence dir, never committed). The settled conformance facts:
     //!
     //! - the fp tag-7 tiles are 2-component lossless SOF3: even/odd
@@ -140,7 +140,7 @@ mod tests {
     //!   streams that the decoder must CLIP;
     //! - the grid is 8×6 = 48 tiles (TIFF tags 324/325, ascending).
     //!
-    //! Test-only by contract (the item-120 byte-freeze lane): no
+    //! Test-only by contract (the byte-freeze lane): no
     //! product surface, no new crate, no flag, no testdata / oracle
     //! change. The corpus-conditional test RUNs when the mirrored frame
     //! is present in the worktree and SKIPs on a fresh checkout (the

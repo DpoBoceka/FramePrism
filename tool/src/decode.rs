@@ -556,7 +556,7 @@ fn decode_j92_one(desc: &J92Desc, output_root: &Path, force: bool) -> Result<Fra
     }))
 }
 
-/// The fp-camera temporal-oracle pinned bound (item 124 — R1, the
+/// The fp-camera temporal-oracle pinned bound (R1, the
 /// owner's ruling (a)): the max-delta (12-bit domain) between the
 /// disputed whole-body-divergent tile's decoded full-nominal plane and
 /// the verified same-class neighbor's same-tile plane at which the
@@ -570,14 +570,14 @@ fn decode_j92_one(desc: &J92Desc, output_root: &Path, force: bool) -> Result<Fra
 /// (the KAT unit pin — `fp_temporal_in_band`).
 pub(crate) const FP_TEMPORAL_MAX_DELTA: u16 = 256;
 
-/// The fp-camera temporal-oracle context (item 124 — R1, the
+/// The fp-camera temporal-oracle context (R1, the
 /// THREAD-LOCAL slot — the PM gate ruling, 2026-10-01): the resolver
 /// closure (the frame name + the tile index → the verified same-class
 /// neighbor's decoded full-nominal tile plane — `None` when no
 /// verified neighbor exists at that tile) + the verified-tile counter
 /// (the clip's census count — `fp_temporal_verified_count`). The slot
 /// is set ONLY by the fp TRANSCODE path's callers (`process_dir` /
-/// the dry-run sample — the item-124 R0 ruling); the DECODE verb,
+/// the dry-run sample — the R0 ruling); the DECODE verb,
 /// carry, archive, and jxl paths never set it (they stay tile-local —
 /// the no-ctx invariance). A `set` ALSO resets the verified counter
 /// (the new ctx carries a fresh `AtomicUsize`; `set(None)` clears the
@@ -598,7 +598,7 @@ pub(crate) struct FpTemporalOracleCtx {
     pub(crate) verified: std::sync::atomic::AtomicUsize,
 }
 
-// The THREAD-LOCAL oracle slot (item 124 — R1): `None` by default —
+// The THREAD-LOCAL oracle slot (R1): `None` by default —
 // every call site that never sets it (the decode verb, the archive
 // path, the KATs, every non-transcode caller) runs the strict
 // tile-local drill (the byte-frozen contract — the oracle adds
@@ -629,7 +629,7 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
-/// Set the thread-local oracle slot (item 124 — R1): the fp
+/// Set the thread-local oracle slot (R1): the fp
 /// transcode path's caller (`process_dir` / the dry-run sample) sets
 /// the resolver around a frame's encode measurement and clears it
 /// after (the error path included — the ctx never leaks into the
@@ -642,7 +642,7 @@ pub(crate) fn set_fp_temporal_oracle(ctx: Option<FpTemporalOracleCtx>) {
     FP_TEMPORAL_ORACLE.with(|s| *s.borrow_mut() = ctx);
 }
 
-/// The oracle's verified-tile count (item 124 — R1): the clip's
+/// The oracle's verified-tile count (R1): the clip's
 /// census term source — the CURRENT THREAD's ctx (the frame being
 /// measured on this thread). 0 when no ctx is set (the no-ctx
 /// default — the decode verb / the archive / every other call site)
@@ -653,7 +653,7 @@ pub(crate) fn fp_temporal_verified_count() -> usize {
     )
 }
 
-/// The oracle's accept predicate (item 124 — R1 — the exact boundary
+/// The oracle's accept predicate (R1 — the exact boundary
 /// the KAT unit-pins): the disputed tile's decoded full-nominal plane
 /// vs the verified neighbor's same-tile plane — the max-delta ≤
 /// `FP_TEMPORAL_MAX_DELTA` accepts (256 → accept, 257 → refuse);
@@ -672,7 +672,7 @@ pub(crate) fn fp_temporal_in_band(full: &[u16], neighbor: &[u16]) -> bool {
     max <= FP_TEMPORAL_MAX_DELTA
 }
 
-/// The fp-camera single-tile verify seam (item 124 — R1, the
+/// The fp-camera single-tile verify seam (R1, the
 /// resolver's neighbor check): the drill-loop body's 4-call core
 /// extracted — `decode_tile_full_nominal` → `planes_from_tile_rows`
 /// (Natural) → `encode_tile_planes` (psv=1) → strict-or-bounded-tail.
@@ -741,7 +741,7 @@ fn find_last_ffd9(data: &[u8]) -> Option<usize> {
         .find(|&i| data[i] == 0xFF && data[i + 1] == 0xD9)
 }
 
-/// The fp-camera bounded-tail drill's acceptance check (item 122 — R4,
+/// The fp-camera bounded-tail drill's acceptance check (R4,
 /// the M0 RULING #1). Returns TRUE iff `stored` (the camera's fp tile)
 /// matches `re` (the tool's Natural-PSV1 re-encode of the decoded full-
 /// nominal plane) STRICTLY, or with the divergence CONFINED to the
@@ -931,7 +931,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
         let is_og3k_ds2x = tileenc::is_og3k_ds2x_gate(width, height);
         let is_uhd_ds2x = tileenc::is_uhd_ds2x_gate(width, height);
         let is_uhd = tileenc::is_uhd_gate(width, height);
-        // The fp-camera lossless shape (item 122 — R1): the measured
+        // The fp-camera lossless shape (R1): the measured
         // class fingerprint (3856×2170 × 512×368 × 12 bps — the
         // A001_013 tag-7 camera output). Class-keyed: the arm fires on
         // the fingerprint (the shape + the bps), not on a depth/mode
@@ -947,7 +947,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
         let is_fp_camera =
             tileenc::is_fp_camera_shape(width, height, tw, th, bps as u32);
         let modern = if is_fp_camera {
-            // The fp-camera lossless grid (item 122): the 512×368
+            // The fp-camera lossless grid: the 512×368
             // FULL-NOMINAL 8×6 = 48-tile grid at 12 bps. Every tile
             // decodes as the full 512×368 stream (the ragged-edge tiles
             // carry the off-frame padding INSIDE the stream — the R3
@@ -1097,7 +1097,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             } else if is_uhd {
                 (
                     "964×272 or 482×272 or 512×368".to_string(),
-                    " (the 964×272 = the @10 measured grid; the 482×272 = the @12/@8 in-profile grid + the pre-lane @10 output; the 512×368 = the fp-camera-lossless grid — item 122)".to_string(),
+                    " (the 964×272 = the @10 measured grid; the 482×272 = the @12/@8 in-profile grid + the pre-lane @10 output; the 512×368 = the fp-camera-lossless grid)".to_string(),
                 )
             } else {
                 (
@@ -1170,7 +1170,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             prev_end = o + l;
         }
         if is_fp_camera {
-            // The fp-camera container contract (item 122 — R2): the fp
+            // The fp-camera container contract (R2): the fp
             // frame's IFD occupies the file tail, so the tile blob must
             // end EXACTLY at the IFD offset (`meta.ifd0.off` — the M0
             // RULING #1 seam note: the datum is the existing
@@ -1197,7 +1197,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             let c = (i % grid.cols as usize) as u32;
             let rect = tileenc::tile_region(width, height, &grid, r, c)
                 .map_err(|e| anyhow!("{what}: tile ({r},{c}): {e}"))?;
-            // The fp-camera class (item 122 — R3): the stream is the
+            // The fp-camera class (R3): the stream is the
             // FULL-NOMINAL 512×368 tile (the ragged-edge padding is
             // inside the stream), so decode via
             // `decode_tile_full_nominal` (validate the nominal geometry
@@ -1208,7 +1208,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             // so the copy loop below is UNCHANGED (the byte-freeze on
             // the archive path — `is_fp_camera` is false there).
             let dec = if is_fp_camera {
-                // The item-125 profile phase (`fp-input-decode` — the
+                // The profile phase (`fp-input-decode` — the
                 // 48 fp input tiles' decode, summed; the guard is a
                 // checked no-op at the gate OFF):
                 let _p = crate::profile::phase("fp-input-decode").start();
@@ -1303,7 +1303,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             let rect = tileenc::tile_region(width, height, &grid, r, c)
                 .map_err(|e| anyhow!("{what}: tile ({r},{c}): {e}"))?;
             if is_fp_camera {
-                // The fp-camera bounded-tail drill (item 122 — R4, the
+                // The fp-camera bounded-tail drill (R4, the
                 // M0 RULING #1): the fp tiles were encoded by the SIGMA
                 // FP CAMERA's own JPEG encoder (NOT the tool), so the
                 // tool's deterministic encoder cannot reproduce the
@@ -1347,9 +1347,9 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
                 // identical refusal below (the 122 KAT pins re-run
                 // unchanged — the oracle adds acceptance, never a
                 // new or changed refusal line).
-                // The item-125 profile phase (`fp-input-drill` — the
+                // The profile phase (`fp-input-drill` — the
                 // 48 fp input tiles' re-encode + compare, the
-                // item-124 oracle consult inside, summed; the guard
+                // the temporal-oracle consult inside, summed; the guard
                 // is a checked no-op at the gate OFF):
                 let _p = crate::profile::phase("fp-input-drill").start();
                 let full_rect = crate::tileenc::TileRect {
@@ -1375,7 +1375,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
                 let re = tileenc::encode_tile_planes(&planes, bps as u32, 1)
                     .map_err(|e| anyhow!("{what}: tile ({r},{c}): drill re-encode: {e}"))?;
                 if re.as_slice() != stored && !fp_bounded_tail_match(stored, &re) {
-                    // The whole-body divergence (the item-124 class —
+                    // The whole-body divergence (the temporal-oracle class —
                     // the camera encoder's non-canonical whole-body
                     // lossless coding): the TEMPORAL-ORACLE gate (the
                     // owner's ruling (a) — the fp TRANSCODE path only).
@@ -3620,7 +3620,7 @@ mod tests {
         (longs(324), longs(325))
     }
 
-    // The item-120 KAT's canary pins, re-derived at the SHIPPED path
+    // The conformance KAT's canary pins, re-derived at the SHIPPED path
     // (a delta = a STOP finding, the PM rules — the R6 test 3 pin).
     const FP_PIN_MIN: u16 = 256;
     const FP_PIN_MAX: u16 = 4095;
@@ -3666,7 +3666,7 @@ mod tests {
             .expect("the foreign 3856×2170 grid must refuse");
         assert_eq!(
             err.to_string(),
-            "foreign-grid: unexpected tile grid tags 322/323 = 300×300 (expected 964×272 or 482×272 or 512×368 (the 964×272 = the @10 measured grid; the 482×272 = the @12/@8 in-profile grid + the pre-lane @10 output; the 512×368 = the fp-camera-lossless grid — item 122) — the lossless tile geometry)"
+            "foreign-grid: unexpected tile grid tags 322/323 = 300×300 (expected 964×272 or 482×272 or 512×368 (the 964×272 = the @10 measured grid; the 482×272 = the @12/@8 in-profile grid + the pre-lane @10 output; the 512×368 = the fp-camera-lossless grid) — the lossless tile geometry)"
         );
         // (3) 512×368 at a NON-fp geometry (1000×1000) → the EXISTING
         // named refusal UNCHANGED (the default 482×272 refusal — the fp
@@ -3689,7 +3689,7 @@ mod tests {
     /// region bit-exactly (the interior tile = the full 512×368; the
     /// corner tile = the top-left 272×330 clip); the padding content
     /// (the off-frame columns/rows) is deterministic but NOT asserted
-    /// (the item-120 KAT contract). (B) WALL 2 (the R2 class-keyed
+    /// (the conformance KAT contract). (B) WALL 2 (the R2 class-keyed
     /// container check) — a synthetic fp container (the IFD at the file
     /// tail, 48 contiguous tiles) with the blob ending EXACTLY at the
     /// IFD offset PASSES the container check (the error is the decode,
@@ -3719,7 +3719,7 @@ mod tests {
         );
         // The CORNER tile: the visible rect = the top-left 272×330 (the
         // padding clip — the off-frame columns 272..511 + rows 330..367
-        // are the UNASSERTED padding — the item-120 KAT contract).
+        // are the UNASSERTED padding — the conformance KAT contract).
         let corner_rect = crate::tileenc::TileRect { x0: 0, y0: 0, tw: 272, tl: 330 };
         let got_corner =
             tileenc::decode_tile_full_nominal(&tile, &corner_rect, 12, 512, 368)
@@ -3772,7 +3772,7 @@ mod tests {
     /// bounded-tail semantics — the CENSUS PIN: 11 strict / 80 final-
     /// data-byte / 3 even-size-pad / 2 corner post-EOI; the W7/W2 = 0
     /// pin), the 3856×2170 plane, the corner-rect clip (272×330), the
-    /// CANARY PINS (the item-120 KAT's pins re-derived at the SHIPPED
+    /// CANARY PINS (the conformance KAT's pins re-derived at the SHIPPED
     /// path — a delta = a STOP finding, the PM rules). PLUS the
     /// SYNTHETIC PREFIX-FLIP CASE (the R4 NAMED REFUSAL pin — the M0
     /// names this KAT): a real fp tile with a byte flip in the PREFIX
@@ -3786,7 +3786,7 @@ mod tests {
             "A001_013_20260930_000001.DNG",
             "A001_013_20260930_000723.DNG",
         ];
-        let first = frames[0]; // the f000001 canary frame (the item-120 KAT's frame)
+        let first = frames[0]; // the f000001 canary frame (the conformance KAT's frame)
         // RUNs when BOTH mirrored frames are present, SKIPs on a fresh
         // checkout.
         for n in &frames {
@@ -3861,7 +3861,7 @@ mod tests {
                     w2_match += 1;
                 }
             }
-            // The CANARY PINS on f000001 (the item-120 KAT's pins
+            // The CANARY PINS on f000001 (the conformance KAT's pins
             // re-derived at the SHIPPED path — a delta = a STOP finding,
             // the PM rules).
             if n == first {

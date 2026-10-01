@@ -218,7 +218,7 @@ pub fn eta_ms(ms: &[f64], n: u64) -> (Option<f64>, Option<f64>) {
 }
 
 // =====================================================================
-// The per-population encoded projection (the item-123 R0 ruling —
+// The per-population encoded projection (the R0 ruling —
 // R3, the both-estimates machinery): the same two projection forms
 // (the total_source/ratio_q fallback + the per-frame-then-sum) at the
 // band's quantiles, over a CHOSEN population — the raw frames only
@@ -289,7 +289,7 @@ pub struct Opts {
     /// — the per-frame wall is jobs-independent, the frame encode is
     /// single-threaded; the line is printed).
     pub jobs: usize,
-    /// The CLI `--carry` opt-in (the item-123 R0 ruling — the
+    /// The CLI `--carry` opt-in (the R0 ruling — the
     /// fp-camera frames' byte-exact source copy instead of the
     /// transcode default): the sample dispatch + the both-estimates
     /// logic both key on it (the dry run's explicit seam — the
@@ -300,7 +300,7 @@ pub struct Opts {
     pub verify_flag: bool,
 }
 
-/// The mixed clip's BOTH estimates (the item-123 R0 ruling — R3):
+/// The mixed clip's BOTH estimates (the R0 ruling — R3):
 /// the two archive plans the user can run — `--carry` (the explicit
 /// opt-in: the raw frames encoded + the fp frames the byte-exact
 /// source copy) and the transcode (the default: every frame at the
@@ -639,7 +639,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         a
     };
     crate::live::begin(k);
-    // The item-124 temporal-oracle resolver's clip list (the encode
+    // The temporal-oracle resolver's clip list (the encode
     // run's process_dir mirror): the frames as (path relative to the
     // input root, the pre-scan class, the ordinal from the frame
     // field) — the resolver's candidate domain (the class is the
@@ -663,7 +663,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
             (rel, class_scans[i].0, ord)
         })
         .collect();
-    // The per-clip temporal-verified count (item 124 — R4, the census
+    // The per-clip temporal-verified count (R4, the census
     // term's source — the clip key = the report's clip key; the
     // sample-derived data the post-sample census-line amendment
     // carries into the record).
@@ -681,7 +681,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         let (cls, structure) = class_scans[idx as usize];
         //: the policy table's sample dispatch (the mixed-compression
         // contract — the dry-run mirror of the encode-side table, ONE
-        // function, the item-123 R0 ruling row): the raw class = the
+        // function, the R0 ruling row): the raw class = the
         // existing measured sample encode (unchanged); the fp-camera
         // class on the lossless row = the RULING cell — Transcode by
         // default (the sample encode through the transcode seam — the
@@ -712,7 +712,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
                 // the source bytes ARE the output (the encode run's
                 // tmp+rename write copies them; the carried frame's
                 // verify = the source-sha match, never a decode — the
-                // decode-side verify is the item-122 scope).
+                // fp-camera lossless decode's scope).
                 crate::live::note_done(&name, src_sizes[idx as usize], src_sizes[idx as usize], 1.0, 0.0);
                 continue;
             }
@@ -729,7 +729,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
                 // named line (the strict parse) fires below.
             }
         }
-        // The item-124 temporal-oracle ctx (the encode run's
+        // The temporal-oracle ctx (the encode run's
         // process_dir mirror): the fp sample frame's transcode
         // measurement runs under the resolver (the disputed
         // whole-body tile is accepted only via the verified same-
@@ -806,7 +806,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
     }
     crate::live::finish();
 
-    // The item-124 temporal-verified census term (the sample-derived
+    // The temporal-verified census term (the sample-derived
     // amendment of the pre-sample census line): the clip's oracle-
     // verified whole-body tile count (the disputed tiles the sample's
     // transcodes rescued) joins the census line of the clips whose
@@ -842,7 +842,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
     let bd = if m > 0 { Some(band(&ratios)) } else { None };
 
     if let (Some(b), Some(free_b)) = (&bd, Some(free)) {
-        //: the encoded estimate's population (the item-123 R0 ruling
+        //: the encoded estimate's population (the R0 ruling
         // — the both-estimates contract): the CARRIED scenario
         // (`--carry` — the raw frames at the measured band; the fp
         // frames ride the carried line at the exact source bytes) +
@@ -934,7 +934,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         if mixed {
             if o.carry {
                 println!(
-                    "estimate: carried (the fp-camera lossless frames — the byte copy, no re-encode) — {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the item-122 scope)"
+                    "estimate: carried (the fp-camera lossless frames — the byte copy, no re-encode) — {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the fp-camera lossless decode's scope)"
                 );
             } else {
                 println!(
@@ -1094,7 +1094,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         let raw_worst = crate::preflight::estimate("j92", total_source_raw, mult);
         let worst_combined = carried_bytes.saturating_add(raw_worst);
         println!(
-            "estimate: carried (the fp-camera lossless frames — the byte copy, no re-encode) — {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the item-122 scope)"
+            "estimate: carried (the fp-camera lossless frames — the byte copy, no re-encode) — {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the fp-camera lossless decode's scope)"
         );
         println!(
             "estimate: encoded (the raw class) — {} frame(s) — {total_source_raw} B source; no measured raw ratio (all {k} samples were carried — the fp class): the conservative preflight bound (j92 2.0:1 lower bound × the margin) — worst {raw_worst} B",
@@ -1230,10 +1230,10 @@ fn write_report(
     carried_n: u64,
     carried_bytes: u64,
     // The pre-sample-line census lines (the exact stdout lines — the
-    // item-124 temporal-verified term amended in for the record when
+    // the temporal-verified term amended in for the record when
     // any; n = 0 = the verbatim stdout line, byte-frozen).
     census_lines: &[String],
-    // The both estimates (the item-123 R0 ruling — R3): the mixed
+    // The both estimates (the R0 ruling — R3): the mixed
     // clip's carried vs transcoded plans (size + ETA); None on the
     // raw-only input (the plans coincide — the pre-contract shape) +
     // the no-measured-band paths (the conservative bound / the named
@@ -1317,7 +1317,7 @@ fn write_report(
             if carried_bytes > 0 {
                 if o.carry {
                     md.push_str(&format!(
-                        "projected carried (the fp-camera lossless frames — the byte copy, no re-encode): {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the item-122 scope)\n\n"
+                        "projected carried (the fp-camera lossless frames — the byte copy, no re-encode): {carried_n} frame(s) — {carried_bytes} B (the exact source bytes; the carried frame's verify = the source-sha match — the decode-side verify is the fp-camera lossless decode's scope)\n\n"
                     ));
                 } else {
                     md.push_str(&format!(
@@ -1729,10 +1729,10 @@ mod tests {
         // the CWD/probe candidates otherwise; the override is the
         // process-global slot, the Once idempotent).
         crate::worker::testutil::camera_profile_override();
-        // The item-123 R0 ruling moved this test's behavior: the
+        // The R0 ruling moved this test's behavior: the
         // fp × lossless cell is now the TRANSCODE default; the
-        // assertions below describe the `--carry` opt-in (the item-
-        // 121 contract, kept verbatim) — the flag is set explicitly
+        // assertions below describe the `--carry` opt-in (the carry
+        // contract, kept verbatim) — the flag is set explicitly
         // (the ruling-moved rewire; every assertion unchanged).
         let opts = Opts {
             dest: dest.clone(),
@@ -1748,7 +1748,7 @@ mod tests {
             downscale: false,
             fast: false,
             jobs: 2,
-            carry: true, // the ruling-moved rewire (item 123 R0): the carried scenario
+            carry: true, // the ruling-moved rewire (R0): the carried scenario
             verify_flag: false,
         };
         let t0 = std::time::Instant::now();

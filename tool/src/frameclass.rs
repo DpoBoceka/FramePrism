@@ -93,9 +93,9 @@ pub enum FrameAction {
     Encoded,
     /// The byte-exact source copy (the verify = the source-sha match).
     Carried,
-    /// The transcode (the item-123 R0 ruling — the fp-camera class's
+    /// The transcode (the R0 ruling — the fp-camera class's
     /// lossless cell, the default): the fp frame is decoded through the
-    /// item-122 path + re-encoded through the existing archive path.
+    /// the fp-camera lossless decode path + re-encoded through the existing archive path.
     /// The D4 vocabulary's `transcoded:fp-hardware` — the class is the
     /// fp-camera class, the vendor is the fp hardware (the decode is
     /// the camera's own lossless engine), the action is the transcode.
@@ -245,7 +245,7 @@ fn archive_grid_match(s: &FrameStructure) -> bool {
 /// Classify a measured structure (the pure decision):
 /// - compression 1 + strip (no 322/323) → `RawUncompressed`;
 /// - compression 7 + tiled → the grid check: the fp-camera fingerprint
-///   (512×368 × 48 on 3856×2170 AT 12-BPS — the bps pin, item 123 R5:
+///   (512×368 × 48 on 3856×2170 AT 12-BPS — the bps pin, R5:
 ///   the measured fp arm is 12-bit; the 8-bit camera variant — the
 ///   59-tag IFD + the 50712 × 256 LinearizationTable — has NO corpus on
 ///   disk (every measured fp clip is 12-bit 3856×2170), so it is the
@@ -253,7 +253,7 @@ fn archive_grid_match(s: &FrameStructure) -> bool {
 ///   fp-camera class — `Unknown` + the unknown-row wording, never a
 ///   misclassification into the 12-bit arm; the 8-bit decode arm is
 ///   deferred to a corpus lane — the design record's benefit-map row
-///   stands as the future work, named in the item-123 lane report) →
+///   stands as the future work, named in the lane report) →
 ///   `FpCameraLossless`; a grid in the tool's measured archive grid set
 ///   → `FramePrismArchive`; any other tiled grid → `Unknown`;
 /// - any other readable compression value (incl. a non-tiled 7 — the
@@ -272,7 +272,7 @@ pub fn classify_structure(s: &FrameStructure) -> FrameClass {
                 && s.tile_height == Some(FP_TILE_H)
                 && s.width == Some(FP_FRAME_W)
                 && s.height == Some(FP_FRAME_H)
-                && s.bits_per_sample == Some(12) // the R5 refusal pin (item 123): the fp arm is 12-bit measured; the 8-bit variant is the named refusal, not the arm
+                && s.bits_per_sample == Some(12) // the R5 refusal pin: the fp arm is 12-bit measured; the 8-bit variant is the named refusal, not the arm
                 && s.tile_count == Some(expected_tiles(FP_FRAME_W, FP_FRAME_H, FP_TILE_W, FP_TILE_H) as u32)
             {
                 FrameClass::FpCameraLossless

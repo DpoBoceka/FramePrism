@@ -123,7 +123,7 @@ pub fn process_dir(
     to: Option<&Path>,
     qc_gate: bool,
 ) -> Result<Report> {
-    //: the item-125 profiler gate (the `FRAMEPRISM_PROFILE` env,
+    //: the profiler gate (the `FRAMEPRISM_PROFILE` env,
     // read ONCE at the run entry — the CARRY_FLAG house pattern's
     // run-entry form; absent / other = INACTIVE — the default run is
     // the byte-frozen no-op):
@@ -220,7 +220,7 @@ pub fn process_dir(
             })?,
         )
     };
-    // The per-frame class from the pre-pass meta (item 124 — R2/R3):
+    // The per-frame class from the pre-pass meta (R2/R3):
     // the temporal-oracle resolver's clip list (the pre-pass-
     // classified class the resolver's candidate check needs — zero
     // extra I/O: the meta is the pre-pass's own read). Keyed by the
@@ -255,7 +255,7 @@ pub fn process_dir(
                 }
             };
             // The identity buffer + the parsed IFD (the bounded prefix
-            // pair). The named FENCE EXCEPTION (the 2026-09-30 item-121
+            // pair). The named FENCE EXCEPTION (the 2026-09-30
             // ruling): the fp camera's frames place the IFD at the FILE
             // TAIL (the measured ~4.4 MB offset), beyond the 1 MiB
             // detection prefix — the parse fails with the OUT-OF-WINDOW
@@ -300,7 +300,7 @@ pub fn process_dir(
                     continue;
                 }
             };
-            // The frame's class from the pre-pass meta (item 124 — the
+            // The frame's class from the pre-pass meta (the
             // temporal-oracle resolver's clip list; the classify reads
             // the IFD0 only — the meta is already parsed for the
             // identity check).
@@ -610,7 +610,7 @@ pub fn process_dir(
         );
     }
 
-    //: the item-125 profiler sidecar (the env-gated measurement
+    //: the profiler sidecar (the env-gated measurement
     // surface — the gate OFF = the no-op guard, zero default
     // change): the per-frame phase rows land in
     // `<dest>/.frameprism-profile.tsv` (the dotfile-sidecar
@@ -625,7 +625,7 @@ pub fn process_dir(
     // partition before it), so the order is preserved by the
     // par_iter().collect() contract.
     let total_frames = frames.len();
-    // The temporal-oracle resolver's clip list (item 124 — R2/R3):
+    // The temporal-oracle resolver's clip list (R2/R3):
     // the clip's frames as (path relative to the input root, the
     // pre-pass class, the ordinal from the frame field) — the
     // resolver's candidate domain (built once; the frames are stable
@@ -683,7 +683,7 @@ pub fn process_dir(
                 );
                 emit_frame_line(src, dst, input, output, true, &done_count, total_frames, est_eta_s, &t0);
                 crate::live::note_skipped();
-                //: the item-125 profiler's resume-skip honest no-row
+                //: the profiler's resume-skip honest no-row
                 // contract (the named form: a resume-skipped frame
                 // writes NO row — the defensive clear, never a row):
                 crate::profile::clear_frame();
@@ -696,7 +696,7 @@ pub fn process_dir(
                 };
             }
         }
-        // The item-124 temporal-oracle ctx (the per-frame slot of the
+        // The temporal-oracle ctx (the per-frame slot of the
         // transcode path): for a pre-pass-classified fp-camera-lossless
         // frame, the resolver is set BEFORE the encode (the disputed
         // whole-body tile is accepted only via a verified same-class
@@ -802,7 +802,7 @@ pub fn process_dir(
             }
         }
         emit_frame_line(src, dst, input, output, false, &done_count, total_frames, est_eta_s, &t0);
-        //: the item-125 profiler's per-frame sidecar flush (every
+        //: the profiler's per-frame sidecar flush (every
         // path — Done + Failed: a frame that fails after its read
         // writes the phases it completed; the gate OFF = one atomic
         // load, no allocation, no write):

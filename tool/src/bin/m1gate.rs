@@ -6,8 +6,8 @@
 // (b) in golden mode the native winner must equal the golden tile bytes
 // (the 0.1.0 adaptive output). Nonzero exit on any mismatch.
 //
-// RUN TARGET (the item-126 Stage-1 re-point — named in the lane's note
-// chain + report.md): the reference-product byte-parity contract lives
+// RUN TARGET (the Stage-1 re-point — named in the pin's note
+// chain): the reference-product byte-parity contract lives
 // on the `--trial` path — the base default's 3-candidate size-min trial,
 // byte-frozen (the Stage-1 selection-default flip moved the 482 grid's
 // DEFAULT to the fixed single W7 candidate; the trial — and with it

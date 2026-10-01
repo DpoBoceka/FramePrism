@@ -215,8 +215,8 @@ pub const GATE_UHD_H: u32 = 2170;
 /// 964×272 grid to `CANDIDATES` — no separate family constant).
 pub const GATE_UHD_TILE_W_10: u32 = 964;
 
-/// The fp-camera lossless shape (item 122 — the A001_013 tag-7 class
-/// fingerprint, the M0 census + the item-120 corpus KAT): the 512×368
+/// The fp-camera lossless shape (the A001_013 tag-7 class
+/// fingerprint, the M0 census + the conformance KAT): the 512×368
 /// FULL-NOMINAL 8×6 = 48-tile grid at 12 bps on the 3856×2170 readout
 /// (3856 = 7×512 + 272 — the right column 272 px; 2170 = 5×368 + 330 —
 /// the last row 330 px: the ragged-edge tiles carry the off-frame
@@ -235,7 +235,7 @@ pub const FP_CAMERA_BPS: u32 = 12;
 /// generic grid-cells bail rides, unchanged).
 pub const FP_CAMERA_TILES: u32 = 48;
 
-/// The fp-camera shape predicate (item 122): TRUE iff the frame is the
+/// The fp-camera shape predicate: TRUE iff the frame is the
 /// measured 3856×2170 × 512×368 × 12-bps fp-camera lossless shape. The
 /// decode-side eligibility arm (R1) + the class-keyed container check
 /// (R2) + the bounded-tail drill (R4) all key on this. The frame
@@ -503,7 +503,7 @@ impl Grid {
 
 /// The 482×272 archive grid (the legacy `TILE_W`×`TILE_H` contract —
 /// the A001 full-resolution rows; the `CANDIDATES` family's grid). The
-/// Stage-1 fast-default flip's scope predicate (item 126): on this grid
+/// Stage-1 fast-default flip's scope predicate: on this grid
 /// the no-flag default routes through the shipped `--fast` selection
 /// (the family's fixed W7 head — `encode_tile_fast`), and the `--trial`
 /// flag restores the base default's 3-candidate size-min trial
@@ -763,7 +763,7 @@ pub fn tile_from_planes(p: &Planes) -> Result<Vec<u16>, TileError> {
     Ok(out)
 }
 
-/// Decode an fp-camera FULL-NOMINAL tile (item 122 — R3) and return the
+/// Decode an fp-camera FULL-NOMINAL tile (R3) and return the
 /// `rect`-sized VISIBLE plane (the top-left `rect.tw × rect.tl` of the
 /// nominal `nominal_tw × th` plane — the PADDING CLIP).
 ///
@@ -784,7 +784,7 @@ pub fn tile_from_planes(p: &Planes) -> Result<Vec<u16>, TileError> {
 /// the drill passes the full `nominal_tw × th` rect (the full plane —
 /// the re-encode source). The even/odd COLUMN split + the ljpeg_ref
 /// golden-model decode are the SAME as `decode_tile` (the proven
-/// recombine — the item-120 KAT's pixel-exact canary rides it).
+/// recombine — the conformance KAT's pixel-exact canary rides it).
 pub fn decode_tile_full_nominal(
     jpeg: &[u8],
     rect: &TileRect,
