@@ -510,6 +510,111 @@ pub fn guard_both(
     guard_both_with_mult(frames, input_bytes, output, mult)
 }
 
+// =====================================================================
+// The frame-class census scan (the mixed-compression contract — the
+// scan's class awareness): the IFD-only cost over the frame set — the
+// 512 KiB header window read → `tiff::read_meta` → `frameclass`
+// `classify`; when the IFD is beyond the window (the fp camera's
+// tail-IFD frames — the `BadIfdOffset` out-of-window class, NEVER the
+// malformed class), the full-file read + the named note line (the
+// checksums full-read note vocabulary: `note: {path} — {reason};
+// reading the full file`), then the classify. Any other parse
+// failure (the malformed class) or an I/O error degrades to `Unknown`
+// (the named-refusal class — the census is structural, never a
+// silent guess: the refusal fires downstream, at the clip-class
+// contract check / the policy table, with the frame named).
+// =====================================================================
+
+/// The header window bound (the checksums readers' 512 KiB — the same
+/// bound, the same note vocabulary).
+const CLASS_SCAN_WINDOW: u64 = 512 * 1024;
+
+/// The frame's class + its measured structure (the census scan over a
+/// single path — the caller's frame set; the classifier's pure output
+/// pair: the class = `frameclass::classify` over the structure; the
+/// structure carries the contract-domain predicate's input — the
+/// readable compression, the amended R1/R2 domain clause). See the
+/// section docs for the scan's contract.
+pub fn frame_class_scan(
+    path: &Path,
+) -> (crate::frameclass::FrameClass, crate::frameclass::FrameStructure) {
+    use crate::frameclass;
+    let file_len = match std::fs::metadata(path).map(|m| m.len()) {
+        Ok(l) => l,
+        Err(_) => {
+            return (
+                frameclass::FrameClass::Unknown,
+                frameclass::FrameStructure::default(),
+            )
+        }
+    };
+    let window_len = CLASS_SCAN_WINDOW.min(file_len) as usize;
+    let mut buf = vec![0u8; window_len];
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                frameclass::FrameClass::Unknown,
+                frameclass::FrameStructure::default(),
+            )
+        }
+    };
+    use std::io::Read;
+    if f.read_exact(&mut buf).is_err() {
+        return (
+            frameclass::FrameClass::Unknown,
+            frameclass::FrameStructure::default(),
+        );
+    }
+    match crate::tiff::read_meta(&buf) {
+        Ok(meta) => {
+            let structure = frameclass::structure_from_ifd0(&meta);
+            (frameclass::classify_structure(&structure), structure)
+        }
+        Err(crate::tiff::ParseError::BadIfdOffset(_, _)) => {
+            eprintln!(
+                "note: {} — the frame-class scan: the IFD beyond the 512 KiB header window; reading the full file",
+                path.display()
+            );
+            match std::fs::read(path) {
+                Ok(full) => match crate::tiff::read_meta(&full) {
+                    Ok(meta) => {
+                        let structure = frameclass::structure_from_ifd0(&meta);
+                        (frameclass::classify_structure(&structure), structure)
+                    }
+                    Err(_) => (
+                        frameclass::FrameClass::Unknown,
+                        frameclass::FrameStructure::default(),
+                    ),
+                },
+                Err(_) => (
+                    frameclass::FrameClass::Unknown,
+                    frameclass::FrameStructure::default(),
+                ),
+            }
+        }
+        Err(_) => (
+            frameclass::FrameClass::Unknown,
+            frameclass::FrameStructure::default(),
+        ),
+    }
+}
+
+/// The frame class of ONE frame (the census scan's class half — the
+/// structure is dropped; see `frame_class_scan` for the pair).
+pub fn frame_class_of(path: &Path) -> crate::frameclass::FrameClass {
+    frame_class_scan(path).0
+}
+
+/// The frame-class census over a frame set (the aligned per-frame
+/// class + structure pairs — the caller's census + the per-frame
+/// dispatch ride the same scan; the order is the input's).
+pub fn scan_frame_classes(
+    paths: &[PathBuf],
+) -> Vec<(crate::frameclass::FrameClass, crate::frameclass::FrameStructure)> {
+    paths.iter().map(|p| frame_class_scan(p)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

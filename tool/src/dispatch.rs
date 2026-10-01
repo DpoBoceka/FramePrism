@@ -416,6 +416,17 @@ pub(crate) fn pin_gate(
     Ok(())
 }
 
+/// The item-126 Stage-1 flag-pair refusal (the `--fast` + `--trial`
+/// conflict — the named rc=2 wording, the exact byte the KAT pins):
+/// the two flags select conflicting per-tile selection contracts (the
+/// fixed single W7 candidate vs the base default's 3-candidate
+/// size-min trial). The refusal is UNCONDITIONAL (the uniform,
+/// pinnable contract: a flag-pair conflict regardless of tier/grid —
+/// checked in `main` before any path dispatch, dry-run included).
+pub fn fast_trial_refusal() -> String {
+    "refused: --fast and --trial are mutually exclusive (they select conflicting per-tile selection contracts: --fast = the fixed single W7 candidate, --trial = the base default's 3-candidate size-min trial; on the 482 grid --fast is a no-op against the Stage-1 default — drop one of the flags)".to_string()
+}
+
 /// The `--dry-run` dispatch ( the predict-then-measure arc):
 /// the named surface refusals (rc=2 — the codec + the flag combos),
 /// then the estimate (the verdict + the exit code from the dryrun
@@ -506,6 +517,14 @@ pub(crate) fn dryrun_dispatch(cli: &Cli, input: &Path, output: &Path) -> ExitCod
         return ExitCode::from(2);
     }
     frameprism::dryrun::set_dryrun_flag(true);
+    // The `--trial` flag's dry-run site (the item-126 Stage-1 — the
+    // estimate dispatches BEFORE the encode run's process-flag site,
+    // the 123 carry note): the dry-run's sample encode reads the flag
+    // through the process static (no `Opts` field — the estimate logic
+    // does not branch on trial, only the sample encode's selection
+    // does). On the other grids it is accepted-but-inert (the shipped
+    // selection is unaffected, by construction).
+    frameprism::worker::set_trial_flag(cli.trial);
     let opts = frameprism::dryrun::Opts {
         dest: output.to_path_buf(),
         k_override: cli.dry_run_frames,
@@ -520,6 +539,11 @@ pub(crate) fn dryrun_dispatch(cli: &Cli, input: &Path, output: &Path) -> ExitCod
         downscale: cli.downscale2x,
         fast: cli.fast,
         jobs: cli.jobs,
+        // The `--carry` opt-in (the dry-run seam reads it explicitly —
+        // the dry-run path dispatches before the encode run's process-
+        // flag site; the sample dispatch + the both-estimates logic
+        // both key on it).
+        carry: cli.carry,
         verify_flag: cli.verify,
     };
     let (_verdict, rc) = frameprism::dryrun::estimate(input, &opts);

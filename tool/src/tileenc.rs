@@ -215,6 +215,49 @@ pub const GATE_UHD_H: u32 = 2170;
 /// 964×272 grid to `CANDIDATES` — no separate family constant).
 pub const GATE_UHD_TILE_W_10: u32 = 964;
 
+/// The fp-camera lossless shape (item 122 — the A001_013 tag-7 class
+/// fingerprint, the M0 census + the item-120 corpus KAT): the 512×368
+/// FULL-NOMINAL 8×6 = 48-tile grid at 12 bps on the 3856×2170 readout
+/// (3856 = 7×512 + 272 — the right column 272 px; 2170 = 5×368 + 330 —
+/// the last row 330 px: the ragged-edge tiles carry the off-frame
+/// padding INSIDE the full-nominal stream, and every tile decodes as
+/// the full 512×368 plane — 256×368 per component, the even/odd COLUMN
+/// split). Class-keyed: the decode eligibility (R1) + the class-keyed
+/// container check (R2) + the bounded-tail drill (R4 — the M0 RULING
+/// #1) all fire on this measured fingerprint, not on a depth/mode gate
+/// (the fp frames are the CAMERA's own lossless output — a distinct
+/// class from the tool's own archive output, which rides the existing
+/// arms + the bit-exact drill unchanged).
+pub const FP_CAMERA_TILE_W: u32 = 512;
+pub const FP_CAMERA_TILE_H: u32 = 368;
+pub const FP_CAMERA_BPS: u32 = 12;
+/// The fp-camera grid cell count (8×6 = 48 — the tag-324/325 count the
+/// generic grid-cells bail rides, unchanged).
+pub const FP_CAMERA_TILES: u32 = 48;
+
+/// The fp-camera shape predicate (item 122): TRUE iff the frame is the
+/// measured 3856×2170 × 512×368 × 12-bps fp-camera lossless shape. The
+/// decode-side eligibility arm (R1) + the class-keyed container check
+/// (R2) + the bounded-tail drill (R4) all key on this. The frame
+/// geometry (3856×2170) is the existing `GATE_UHD_W`/`GATE_UHD_H`
+/// readout (the fp camera reads out at the UHD geometry); the
+/// DISTINGUISHING fingerprint is the 512×368 tile grid + the 12 bps
+/// (the tool's own 3856×2170 archive output is the 964×272 / 482×272
+/// grid — never the 512×368 grid). A 512×368 grid at any OTHER frame
+/// geometry (or a different bps) is NOT this class (the existing named
+/// refusal — the R1 KAT's "512×368 at a NON-fp geometry" pin).
+pub fn is_fp_camera_shape(
+    frame_w: u32,
+    frame_h: u32,
+    tile_w: u32,
+    tile_h: u32,
+    bps: u32,
+) -> bool {
+    (frame_w, frame_h) == (GATE_UHD_W, GATE_UHD_H)
+        && (tile_w, tile_h) == (FP_CAMERA_TILE_W, FP_CAMERA_TILE_H)
+        && bps == FP_CAMERA_BPS
+}
+
 /// Per-gate tile geometry (the measured reference contract): the
 /// 3024×2010 Open Gate 3K frame uses the 252×252 grid; every other
 /// geometry keeps the 482×272 grid (the byte-invariance contract).
@@ -456,6 +499,21 @@ impl Grid {
             th,
         }
     }
+}
+
+/// The 482×272 archive grid (the legacy `TILE_W`×`TILE_H` contract —
+/// the A001 full-resolution rows; the `CANDIDATES` family's grid). The
+/// Stage-1 fast-default flip's scope predicate (item 126): on this grid
+/// the no-flag default routes through the shipped `--fast` selection
+/// (the family's fixed W7 head — `encode_tile_fast`), and the `--trial`
+/// flag restores the base default's 3-candidate size-min trial
+/// (byte-frozen — the reference-product byte-parity contract, whose
+/// measured 2.67× workload factor the flip names as the give-up). Every
+/// other grid's shipped selection discipline is UNTOUCHED (the other
+/// grids' byte-invariance pin — the 3K gate's measured bit-count key,
+/// the FHD / OG2K / ds2x families' shipped contracts).
+pub fn is_482_grid(g: &Grid) -> bool {
+    (g.tw, g.th) == (TILE_W, TILE_H)
 }
 
 /// The mosaic region covered by tile (r, c): row-major grid, last row/col
@@ -701,6 +759,82 @@ pub fn tile_from_planes(p: &Planes) -> Result<Vec<u16>, TileError> {
                 out[y * tw as usize + 2 * x + 1] = p.odd[y * cols_u + x];
             }
         }
+    }
+    Ok(out)
+}
+
+/// Decode an fp-camera FULL-NOMINAL tile (item 122 — R3) and return the
+/// `rect`-sized VISIBLE plane (the top-left `rect.tw × rect.tl` of the
+/// nominal `nominal_tw × th` plane — the PADDING CLIP).
+///
+/// The fp-camera stream is ALWAYS the full `nominal_tw × th` nominal
+/// tile (256×368 per component — the even/odd COLUMN split), even for
+/// the ragged-edge tiles (the right-column 272-wide and the bottom-row
+/// 330-tall tiles): the off-frame padding (the columns ≥ the frame's
+/// 3856, the rows ≥ the frame's 2170) is REAL stored data INSIDE the
+/// stream. So the plane geometry is the NOMINAL 512×368 — NOT the
+/// visible rect. The archive `decode_tile`'s geometry check validates
+/// against `rect.tw` and would reject the full-nominal fp stream on the
+/// ragged-edge tiles (`GeometryMismatch` — the wall-3 the R3 seam
+/// removes): this seam instead validates against the nominal geometry
+/// (the stream's own shape) and then clips the visible rect.
+///
+/// The assembly (R3) + the bounded-tail drill (R4) both ride this seam:
+/// the assembly passes the visible `rect` (the clip to the frame);
+/// the drill passes the full `nominal_tw × th` rect (the full plane —
+/// the re-encode source). The even/odd COLUMN split + the ljpeg_ref
+/// golden-model decode are the SAME as `decode_tile` (the proven
+/// recombine — the item-120 KAT's pixel-exact canary rides it).
+pub fn decode_tile_full_nominal(
+    jpeg: &[u8],
+    rect: &TileRect,
+    expected_precision: u32,
+    nominal_tw: u32,
+    th: u32,
+) -> Result<Vec<u16>, TileError> {
+    let (info, comps) = crate::ljpeg_ref::decode(jpeg)
+        .map_err(|e| TileError::Decode(format!("golden-model (ljpeg_ref) decode: {e}")))?;
+    if info.nf != 2 {
+        return Err(TileError::Decode(format!(
+            "expected 2 components, got {}",
+            info.nf
+        )));
+    }
+    if info.precision != expected_precision {
+        return Err(TileError::Decode(format!(
+            "expected {expected_precision}-bit precision, got {}",
+            info.precision
+        )));
+    }
+    // The FULL-NOMINAL plane: the even/odd COLUMN recombine to
+    // nominal_tw × th (the fp stream is the full tile — the ragged-edge
+    // padding is inside the stream). `tile_from_planes` validates the
+    // component geometry against the NOMINAL rect (the stream's own
+    // shape — NOT the visible rect).
+    let full = tile_from_planes(&Planes {
+        rect: TileRect {
+            x0: rect.x0,
+            y0: rect.y0,
+            tw: nominal_tw,
+            tl: th,
+        },
+        rows: info.height,
+        cols: info.width,
+        th,
+        even: comps[0].clone(),
+        odd: comps[1].clone(),
+    })?;
+    // The PADDING CLIP: the visible region is the top-left `rect.tw ×
+    // rect.tl` of the nominal plane (the interior tile = the full plane
+    // — no clip; the ragged-edge tiles = the clipped corner).
+    if rect.tw >= nominal_tw && rect.tl >= th {
+        return Ok(full);
+    }
+    let mut out = vec![0u16; (rect.tw * rect.tl) as usize];
+    for y in 0..rect.tl as usize {
+        let src = y * nominal_tw as usize;
+        out[y * rect.tw as usize..y * rect.tw as usize + rect.tw as usize]
+            .copy_from_slice(&full[src..src + rect.tw as usize]);
     }
     Ok(out)
 }

@@ -94,6 +94,17 @@ pub mod diff;
 /// filesystem synchronization (see the module docs).
 pub mod durability;
 pub mod fastenc;
+/// The frame classifier (the mixed-compression arc's D1 move):
+/// the pure, IFD-only, structure-keyed frame CLASS (the pinned names:
+/// `RawUncompressed` · `FpCameraLossless` · `FramePrismArchive` ·
+/// `Unknown`) over the `tiff::read_meta` structure (no pixel access —
+/// the discriminator tags are in-line count-1 values + the entry
+/// counts) + the named refusal wordings (the pinned verbatim forms)
+/// + the clip-class contract (the allowed per-clip class SETS)
+/// + the per-frame class/action registry (the encode/carry site's
+/// note — the report's provenance claim; the `sourcecheck` registry
+/// pattern). See the module docs.
+pub mod frameclass;
 pub mod iso_times;
 /// JXL flag path (`--codec jxl`, effort `--jxl-effort {4|7|9}` with
 /// default e7): 4 × 2×2 sub-plane modular lossless JXL per frame
@@ -155,6 +166,7 @@ pub mod offload;
 /// resolved state lands in the run report's tool/versions block (see
 /// the module docs).
 pub mod pins;
+mod profile;
 /// Pre-flight space + ETA guard: the
 /// conservative output estimate (input / 2.0 j92 · / 2.2 jxl × the
 /// 1.25 margin) vs the output volume's free space (the jxl disk gate's
@@ -560,7 +572,7 @@ mod env_compat_tests {
             (include_str!("offload/transfer.rs"), 0),
             (include_str!("pack12.rs"), 0),
             (include_str!("pins.rs"), 0),
-            (include_str!("preflight.rs"), 0),
+            (include_str!("preflight.rs"), 1),
             (include_str!("provenance.rs"), 3),
             (include_str!("qc.rs"), 0),
             (include_str!("reel.rs"), 1),
@@ -575,9 +587,9 @@ mod env_compat_tests {
             (include_str!("tileenc.rs"), 0),
             (include_str!("verify.rs"), 0),
             (include_str!("worker/checksums.rs"), 0),
-            (include_str!("worker/encode.rs"), 1),
+            (include_str!("worker/encode.rs"), 2),
             (include_str!("worker/ingest.rs"), 0),
-            (include_str!("worker/report.rs"), 0),
+            (include_str!("worker/report.rs"), 1),
             (include_str!("worker/sidecar.rs"), 0),
         ];
         // The PRODUCTION region = before the column-0 test-module
@@ -598,9 +610,13 @@ mod env_compat_tests {
                 "the production-region std::fs::read count moved (a new whole-file media read?) — the bounded-read invariant is the gate"
             );
         }
-        // The keep-anchors: the 17 recorded keep sites (the C/D/
-        // exe-self-sha class) are in place.
-        let anchors: [(&str, &str); 17] = [
+        // The keep-anchors: the 20 recorded keep sites (the C/D/
+        // exe-self-sha class + the two item-121 sanctioned full-file
+        // fallback reads — the PM-ruled pre-pass exception + the
+        // frame-class scan's `BadIfdOffset` fallback; each fires its
+        // named note line beside the read — + the item-124 oracle
+        // neighbor read, silent by design) are in place.
+        let anchors: [(&str, &str); 20] = [
             (include_str!("bake.rs"), "std::fs::read(output.join(&r.manifest_name))"),
             (include_str!("bake.rs"), "std::fs::read(staging.join(&r.manifest_name))"),
             (include_str!("bake.rs"), "std::fs::read(&ro_manifest).with_context(|| {"),
@@ -617,6 +633,18 @@ mod env_compat_tests {
             (include_str!("provenance.rs"), "std::fs::read(&args.manifest) {"),
             (include_str!("reel.rs"), "std::fs::read(&p) {"),
             (include_str!("worker/encode.rs"), "std::fs::read(src).with_context(|| format!(\"read {}\", src.display()))?;"),
+            // The item-124 fp temporal-oracle neighbor read (the R2
+            // contract: the resolver's read-only, per-clip-cached
+            // read of the temporal neighbor's source frame — the
+            // disputed tile is accepted only against this neighbor's
+            // drill-verified same-tile plane within the pinned bound).
+            // SILENT by design: unlike the item-121 keeps it fires no
+            // named note line — a refused drill still emits the
+            // EXISTING wording (the byte-freeze requires
+            // encode/stdout silence on success).
+            (include_str!("worker/encode.rs"), "std::fs::read(&cand_abs).ok()"),
+            (include_str!("preflight.rs"), "match std::fs::read(path) {"),
+            (include_str!("worker/report.rs"), "let full = match std::fs::read(src) {"),
             (include_str!("jxl.rs"), "std::fs::read(src).with_context(|| format!(\"read {}\", src.display()))?;"),
         ];
         for (module, anchor) in anchors {
