@@ -1325,8 +1325,8 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
                 // full-nominal even in the full rows — the padding
                 // columns are real stored data — so the self-sourced
                 // pattern applies to the WHOLE grid, not just the
-                // bottom row). ITEM 124 (the temporal-oracle class —
-                // the owner's ruling (a)): the whole-body divergence
+                // bottom row). The temporal-oracle class (the owner's
+                // ruling (a)): the whole-body divergence
                 // (the camera's non-canonical whole-body lossless
                 // coding — 3/17,376 tiles measured, the adjudication
                 // 2026-09-30) is the NEW member class the tile-local
@@ -3431,7 +3431,7 @@ mod tests {
     }
 
     // ===================================================================
-    // ITEM 122 — the fp-camera lossless decode lane (the 3 named tests)
+    // The fp-camera lossless decode lane (the 3 named tests)
     // ===================================================================
 
     /// The fp-camera bounded-tail census class (the M0 RULING #1

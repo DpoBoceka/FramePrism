@@ -6145,7 +6145,7 @@ mod tests {
         assert_eq!(p8.tile_dims, (482, 272), "@8: the 482×272 grid (the per-depth inheritance)");
     }
     // =====================================================================
-    // Item 123 — the transcode row + the policy-matrix completion (R4,
+    // The transcode row + the policy-matrix completion (R4,
     // R5, R7).
     // =====================================================================
 
