@@ -674,7 +674,9 @@ pub(crate) fn fp_temporal_in_band(full: &[u16], neighbor: &[u16]) -> bool {
 
 /// The fp-camera single-tile verify seam (R1, the
 /// resolver's neighbor check): the drill-loop body's 4-call core
-/// extracted — `decode_tile_full_nominal` → `planes_from_tile_rows`
+/// extracted — `decode_tile_full_nominal_fast` (the native fast
+/// golden-model path — the reference-model contract: identical
+/// accept/reject + planes + errors) → `planes_from_tile_rows`
 /// (Natural) → `encode_tile_planes` (psv=1) → strict-or-bounded-tail.
 /// `Ok` = the decoded FULL-NOMINAL tile plane (the oracle's
 /// comparison domain); `Err` = the tile fails the drill (a
@@ -700,7 +702,7 @@ pub(crate) fn fp_verify_tile_full_nominal(
         tl: grid.th,
         ..rect
     };
-    let full = tileenc::decode_tile_full_nominal(
+    let full = tileenc::decode_tile_full_nominal_fast(
         stored,
         &full_rect,
         bps,
@@ -951,7 +953,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             // FULL-NOMINAL 8×6 = 48-tile grid at 12 bps. Every tile
             // decodes as the full 512×368 stream (the ragged-edge tiles
             // carry the off-frame padding INSIDE the stream — the R3
-            // `decode_tile_full_nominal` seam clips the visible rect).
+            // `decode_tile_full_nominal_fast` seam clips the visible rect).
             // The 48-cell tag-324/325 count rides the generic
             // grid-cells bail (8×6 = 48, unchanged). The restore drill
             // runs the M0 RULING #1 bounded-tail contract (the R4 arm
@@ -1200,7 +1202,8 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
             // The fp-camera class (R3): the stream is the
             // FULL-NOMINAL 512×368 tile (the ragged-edge padding is
             // inside the stream), so decode via
-            // `decode_tile_full_nominal` (validate the nominal geometry
+            // `decode_tile_full_nominal_fast` (the native fast
+            // golden-model path — validate the nominal geometry
             // + clip the visible rect) — the archive `decode_tile`'s
             // `rect.tw` geometry check would reject the full-nominal fp
             // stream on the ragged-edge tiles (wall 3). Both decode
@@ -1361,7 +1364,7 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
                     tl: grid.th,
                     ..rect
                 };
-                let full = tileenc::decode_tile_full_nominal(
+                let full = tileenc::decode_tile_full_nominal_fast(
                     stored,
                     &full_rect,
                     bps as u32,
@@ -3952,6 +3955,108 @@ mod tests {
             err.to_string().contains("fp-camera tile prefix mismatch")
                 && err.to_string().contains("the M0 RULING #1"),
             "the prefix-flip fp tile must fire the NAMED drill refusal (the R4 pinned wording): {err}"
+        );
+    }
+
+    /// The NATIVE-PATH DRILL CENSUS PIN (corpus-conditional over the
+    /// mirrored A001_013 + A001_013_miniclips): the SHIPPED drill core
+    /// — `decode_tile_full_nominal_fast` (the native fast golden-model
+    /// path) → the Natural-PSV1 re-encode → the strict-or-bounded-tail
+    /// — over every fp frame of the mirror, pinning the measured M0
+    /// classification contract: the 432-tile aggregate (28 strict /
+    /// 371 final-data-byte / 21 even-size-pad / 9 corner post-EOI)
+    /// + EXACTLY the three whole-body refusals (the disputed tiles —
+    /// f277 tile 44, f287 tile 5, f395 tile 44). The aggregate is the
+    /// one the reference-model probe measured pre-swap — the native
+    /// path must reproduce it (a delta = the classification contract
+    /// moved, the PM rules).
+    #[test]
+    fn kat_fp_native_drill_census_pin() {
+        let dirs = [
+            "../testdata/originals/A001_013",
+            "../testdata/originals/A001_013_miniclips",
+        ];
+        let mut frames: Vec<(String, String)> = vec![];
+        for d in dirs {
+            if let Ok(rd) = std::fs::read_dir(d) {
+                let mut names: Vec<String> = rd
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .filter(|n| n.ends_with(".DNG"))
+                    .collect();
+                names.sort();
+                for n in names {
+                    frames.push((d.to_string(), n));
+                }
+            }
+        }
+        if frames.is_empty() {
+            eprintln!("skip: no A001_013 corpus mirror (the census pin is corpus-conditional)");
+            return;
+        }
+        let grid = tileenc::Grid::for_dims(3856, 2170, 512, 368);
+        let mut census = [0usize; 4]; // [Strict, FinalDataByte, EvenSizePad, CornerPostEoi]
+        let mut whole_body: Vec<(String, usize)> = vec![];
+        let mut fp_frames = 0usize;
+        for (d, n) in &frames {
+            let buf = std::fs::read(std::path::Path::new(d).join(n))
+                .unwrap_or_else(|e| panic!("{n}: reads: {e}"));
+            let meta = crate::tiff::read_meta(&buf)
+                .unwrap_or_else(|e| panic!("{n}: parse: {e}"));
+            if !matches!(
+                crate::frameclass::classify(&meta),
+                crate::frameclass::FrameClass::FpCameraLossless
+            ) {
+                continue; // the raw class — the drill is the fp frame's
+            }
+            fp_frames += 1;
+            let (offs, lens) = fp_tile_arrays(&buf);
+            assert_eq!(offs.len(), 48, "{n}: the fp frame carries the 48-tile grid");
+            for i in 0..48usize {
+                let stored = &buf[offs[i] as usize..offs[i] as usize + lens[i] as usize];
+                let r = (i / 8) as u32;
+                let c = (i % 8) as u32;
+                let rect = tileenc::tile_region(3856, 2170, &grid, r, c).unwrap();
+                let full_rect = crate::tileenc::TileRect { tw: 512, tl: 368, ..rect };
+                // The SHIPPED drill decode leg (the native fast
+                // golden-model path — the reference-model contract
+                // pinned by the equivalence KATs).
+                let full =
+                    tileenc::decode_tile_full_nominal_fast(stored, &full_rect, 12, 512, 368)
+                        .unwrap_or_else(|e| panic!("{n}: tile {i}: the native drill decode: {e}"));
+                let planes_n1 = tileenc::planes_from_tile_rows(
+                    &full,
+                    &full_rect,
+                    368,
+                    tileenc::Orient::Natural,
+                )
+                .unwrap_or_else(|e| panic!("{n}: tile {i}: the N1 drill planes: {e}"));
+                let re_n1 = tileenc::encode_tile_planes(&planes_n1, 12, 1)
+                    .unwrap_or_else(|e| panic!("{n}: tile {i}: the N1 drill re-encode: {e}"));
+                if re_n1.as_slice() == stored || fp_bounded_tail_match(stored, &re_n1) {
+                    census[fp_classify(stored, &re_n1) as usize] += 1;
+                } else {
+                    whole_body.push((n.clone(), i)); // the whole-body refusal (the disputed class)
+                }
+            }
+        }
+        assert_eq!(
+            fp_frames, 9,
+            "the mirror carries the 9 fp frames the M0 aggregate was measured on"
+        );
+        assert_eq!(
+            census,
+            [28, 371, 21, 9],
+            "the native-path drill census must reproduce the measured M0 contract (28 strict / 371 final-data-byte / 21 even-size-pad / 9 corner post-EOI over 432 tiles) — a delta = the PM rules"
+        );
+        assert_eq!(
+            whole_body,
+            vec![
+                ("A001_013_20260930_000277.DNG".to_string(), 44),
+                ("A001_013_20260930_000287.DNG".to_string(), 5),
+                ("A001_013_20260930_000395.DNG".to_string(), 44),
+            ],
+            "the whole-body refusals are EXACTLY the three disputed tiles (f277 tile 44, f287 tile 5, f395 tile 44) — the no-ctx drill's temporal-oracle class"
         );
     }
 }
