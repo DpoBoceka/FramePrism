@@ -1212,7 +1212,11 @@ pub(crate) fn decode_j92_frame(buf: &[u8], what: &str) -> Result<(u32, u32, Vec<
                 // 48 fp input tiles' decode, summed; the guard is a
                 // checked no-op at the gate OFF):
                 let _p = crate::profile::phase("fp-input-decode").start();
-                tileenc::decode_tile_full_nominal(
+                // The native fast golden-model path (`fastdec` — the
+                // `ljpeg_ref` contract: identical accept/reject +
+                // planes + errors, the equivalence KATs pin it);
+                // the archive path keeps `decode_tile` unchanged.
+                tileenc::decode_tile_full_nominal_fast(
                     &buf[*o as usize..(*o as usize + *l as usize)],
                     &rect,
                     bps as u32,

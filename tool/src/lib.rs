@@ -93,6 +93,12 @@ pub mod diff;
 /// behavior is platform-specific — the guarantee stops at the
 /// filesystem synchronization (see the module docs).
 pub mod durability;
+/// The native FAST lossless JPEG (SOF3, T.81) decoder — the speed twin
+/// of the `ljpeg_ref` golden model (the module contract: identical
+/// accept/reject verdicts, planes, and errors — the fp input decode +
+/// drill path rides it; the reference model stays the acceptance
+/// authority, the KATs pin the equivalence).
+pub mod fastdec;
 pub mod fastenc;
 /// The frame classifier (the mixed-compression arc's D1 move):
 /// the pure, IFD-only, structure-keyed frame CLASS (the pinned names:
