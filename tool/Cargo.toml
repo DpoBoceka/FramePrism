@@ -37,7 +37,7 @@ zstd = "0.14.0"
 # surface). The version the binary embeds is read from the committed
 # Cargo.lock by build.rs (the `FRAMEPRISM_FSTOOL_CRATE_VERSION` env —
 # the pin rows assert their expected against it).
-fstool = { version = "=0.4.33", default-features = false, features = ["iso9660"] }
+fstool = { version = "=0.4.35", default-features = false, features = ["iso9660"] }
 
 # Native FFI (libjpeg-turbo TurboJPEG API) is wired in milestone 1.
 # The scaffold deliberately links nothing native so `cargo check` works
