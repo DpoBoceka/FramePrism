@@ -285,8 +285,17 @@ fn percentile_value(hist: &[u64], total: u64, p: u64) -> u32 {
 }
 
 /// The clip-level moments over a frame set (the summed population — the
-/// frames of ONE clip; a clip is one capture, a single depth; a mixed
-/// depth set is handled by bin-padding, the moments stay exact).
+/// frames of ONE clip; a clip is one capture, a single depth, under ONE
+/// clip class contract (the allowed per-clip class SETS — the raw class
+/// · the mixed {raw, fp-camera} set; the set = the classes of the
+/// frames with a readable compression structure — a parse-failed frame
+/// stays on the encode site's per-frame named refusal, the domain
+/// clause, the `frameclass` module; any other non-empty set = the clip
+/// level's named refusal, the mixed-compression clause, additive to the
+/// contract line); a mixed depth set is handled by bin-padding, the
+/// moments stay exact. Class ⊥ depth: the class dimension is a separate
+/// contract axis and this depth clause is unchanged — the moments take
+/// the frame's samples exactly as measured, whatever the class).
 pub fn clip_moments(frames: &[QcFrame]) -> ClipMoments {
     if frames.is_empty() {
         return ClipMoments {

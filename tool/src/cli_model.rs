@@ -252,10 +252,22 @@ pub(crate) struct Cli {
 
     /// Single-candidate fast mode (lossless only): skip the per-tile
     /// trial encode and always use the fixed Wrapped PSV 7 candidate
-    /// (bit-exact lossless, verify unaffected). Composes with
-    /// `--downscale2x`
+    /// (bit-exact lossless, verify unaffected). On the 482 grid: now
+    /// the default — accepted for compatibility (its output matches
+    /// the default); on the other grids: the single-candidate per-gate
+    /// family head, unchanged. Composes with `--downscale2x`
     #[arg(long)]
     pub(crate) fast: bool,
+
+    /// The base default's 3-candidate size-min trial selection on the
+    /// 482 grid (the pre-Stage-1 default, byte-frozen — the
+    /// pre-Stage-1 byte-parity contract at the measured 2.67×
+    /// workload factor): the 3 candidates per
+    /// tile, the smallest stream wins. On the other grids:
+    /// accepted-but-inert (the shipped selection is unaffected).
+    /// Mutually exclusive with `--fast` (the named rc=2)
+    #[arg(long)]
+    pub(crate) trial: bool,
 
     /// Bit-exact verify per frame (lossless: decode out == unpack in;
     /// log10: LUT-inverted reconstruction within the curve bound + the
@@ -282,6 +294,15 @@ pub(crate) struct Cli {
     /// the ledger row
     #[arg(long)]
     pub(crate) subset: bool,
+
+    /// The fp-camera frames ride the byte-exact source copy instead of
+    /// the transcode (the default is transcode:
+    /// the fp frame is decoded + re-encoded through the archive path so
+    /// every output frame is in the measured archive contract). A
+    /// no-op outside the fp-camera class (the raw-only behavior is
+    /// untouched by construction)
+    #[arg(long)]
+    pub(crate) carry: bool,
 
     /// Also write a TSV report to this path (manifest-compatible columns)
     #[arg(long)]
@@ -423,10 +444,12 @@ pub(crate) fn tier_cli(cli: &Cli, codec: CodecArg, to: Option<PathBuf>, report: 
         reference_structure_tsv: cli.reference_structure_tsv.clone(),
         downscale2x: cli.downscale2x,
         fast: cli.fast,
+        trial: cli.trial,
         verify: cli.verify,
         force: cli.force,
         resume: cli.resume,
         subset: cli.subset,
+        carry: cli.carry,
         dry_run: cli.dry_run,
         dry_run_frames: cli.dry_run_frames,
         report,

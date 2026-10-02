@@ -806,6 +806,173 @@ pub fn write_reports(
                 })
         ));
         md.push_str(&format!("sidecar: {sidecar_line}\n"));
+        //: the class census line (the mixed-compression contract — the
+        // additive line, ALL clips): the per-class count (the clip's
+        // whole frame set — the per-frame class below) + the per-run
+        // carried/encoded split (the registry claims — the
+        // encode/carry site's note; the resume-skip / the failed frame
+        // carry the re-derived class + the outcome's action word) +
+        // the carried bytes (the sum of the carried frames' source
+        // bytes — the byte copy, no re-encode). The raw-only clip's
+        // delta is this line alone (the byte-identity clause: the
+        // provenance section is absent, nothing else renders).
+        let clip_idxs: Vec<usize> = frames
+            .iter()
+            .enumerate()
+            .filter(|(_, (src, _))| clip_key_of(input, src) == c.clip)
+            .map(|(i, _)| i)
+            .collect();
+        let clip_base = if c.clip.is_empty() {
+            input.to_path_buf()
+        } else {
+            input.join(&c.clip)
+        };
+        // The offload's source-sha lookup (the `--to` run — the same
+        // key space + the same preference order as the sources rows:
+        // the offload report, the registry claim, the write-site
+        // streaming read, the named absence).
+        let offload_map: std::collections::BTreeMap<&str, &crate::offload::OffloadRow> = offload
+            .map(|r| r.rows.iter().map(|row| (row.file.as_str(), row)).collect())
+            .unwrap_or_default();
+        let mut class_counts: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
+            std::collections::BTreeMap::new();
+        let mut enc_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
+            std::collections::BTreeMap::new();
+        let mut car_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
+            std::collections::BTreeMap::new();
+        // The per-class transcoded split (the
+        // fp-camera class's lossless cell, the default): the census's
+        // per-run action split gains the transcoded term ONLY when a
+        // class has transcoded frames > 0 (the raw-only + the
+        // `--carry`-mixed lines stay byte-identical to the carry
+        // forms — the byte-identity clause).
+        let mut trans_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
+            std::collections::BTreeMap::new();
+        let mut carried_bytes = 0u64;
+        // The clip's oracle-verified tile count (R4, the
+        // census term's source): the sum of the per-frame claims (the
+        // process_dir write site's notes — the frame's ctx counter
+        // read before the clear; absent = 0 — the raw class / the
+        // carry / the resume-skip / the non-transcode callers). 0 =
+        // no term (the 123 shape, byte-frozen).
+        let mut temporal_verified_total = 0u64;
+        // The per-frame provenance rows (the mixed-compression
+        // contract: file / class / action / source_sha256 — the clip's
+        // frames in the collect order; the section renders only when
+        // this run carried a frame — the MIXED clip, the R6 clause).
+        let mut prov: Vec<(
+            String,
+            crate::frameclass::FrameClass,
+            String,
+            String,
+        )> = Vec::new();
+        for &i in &clip_idxs {
+            let (src, dst) = &frames[i];
+            let rel = src
+                .strip_prefix(&clip_base)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_else(|_| {
+                    src.file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                });
+            let rel_key = dst_rel(output, dst);
+            // The frame's oracle-verified tile count (the
+            // claim is unconditional over the clip's frames; the
+            // absent key = 0 — the 123 shape stands).
+            temporal_verified_total +=
+                crate::worker::encode::claim_fp_temporal_verified(&rel_key) as u64;
+            let (class, action) = match &outcomes[i] {
+                Outcome::Done(s) => {
+                    let (class, action) =
+                        match crate::frameclass::claim_frame_action(&rel_key) {
+                            Some(ca) => ca,
+                            // The write-site fallback (the note is
+                            // absent — the non-encode caller's Done:
+                            // the class is re-derived from the source
+                            // (the IFD-only scan), the action is the
+                            // encoded default — the frame passed the
+                            // encode path).
+                            None => (
+                                crate::preflight::frame_class_of(src),
+                                crate::frameclass::FrameAction::Encoded,
+                            ),
+                        };
+                    match action {
+                        crate::frameclass::FrameAction::Encoded => {
+                            *enc_count.entry(class).or_default() += 1;
+                        }
+                        crate::frameclass::FrameAction::Carried => {
+                            *car_count.entry(class).or_default() += 1;
+                            carried_bytes += s.in_bytes;
+                        }
+                        crate::frameclass::FrameAction::Transcoded => {
+                            // The transcoded frame's census bytes are
+                            // NOT carried bytes (the output is the
+                            // re-encode — the encoded line's bytes are
+                            // the dst's, the clip stats' job).
+                            *trans_count.entry(class).or_default() += 1;
+                        }
+                    }
+                    (class, action.name().to_string())
+                }
+                Outcome::Skipped { .. } => (
+                    crate::preflight::frame_class_of(src),
+                    String::from("skipped"),
+                ),
+                Outcome::Failed { .. } => (
+                    crate::preflight::frame_class_of(src),
+                    String::from("failed"),
+                ),
+            };
+            *class_counts.entry(class).or_default() += 1;
+            let sha = if let Some(row) = offload_map.get(rel_key.as_str()) {
+                row.source_sha.clone()
+            } else if let Some(sha) = crate::sourcecheck::claim_source_sha(&rel_key) {
+                sha
+            } else {
+                match crate::jxl::sha256_stream_path(src) {
+                    Ok(sha) => sha,
+                    Err(_) => String::from("-"),
+                }
+            };
+            prov.push((rel, class, action, sha));
+        }
+        let census_parts: Vec<String> = class_counts
+            .iter()
+            .map(|(cl, n)| {
+                let mut part = format!(
+                    "{} {} (encoded {} · carried {}",
+                    cl.name(),
+                    n,
+                    enc_count.get(cl).copied().unwrap_or(0),
+                    car_count.get(cl).copied().unwrap_or(0)
+                );
+                if let Some(t) = trans_count.get(cl) {
+                    if *t > 0 {
+                        part.push_str(&format!(" · transcoded {t}"));
+                    }
+                }
+                if *cl == crate::frameclass::FrameClass::FpCameraLossless
+                    && temporal_verified_total > 0
+                {
+                    // The temporal-verified census term (the clip's oracle-
+                    // verified whole-body tile count — the 123
+                    // `· transcoded {t}` pattern; ONLY when n > 0 —
+                    // the raw-only + the no-verified-neighbor shapes
+                    // stand byte-frozen at n = 0).
+                    part.push_str(&format!(
+                        " · temporal-verified {temporal_verified_total}"
+                    ));
+                }
+                part.push(')');
+                part
+            })
+            .collect();
+        md.push_str(&format!(
+            "class census: {} — carried bytes {carried_bytes}\n",
+            census_parts.join(" · ")
+        ));
         //: the non-frame members section (the clip's INPUT dir
         // → the OUTPUT copy's verdicts — the row is sha-verified, the
         // determinism/repair claim does NOT apply: the members are
@@ -989,6 +1156,33 @@ pub fn write_reports(
                 ok = block.map(|b| b.ok).unwrap_or(0),
                 dirty = block.map(|b| b.total - b.ok).unwrap_or(0)
             ));
+        }
+        //: the per-frame provenance section (the mixed-compression
+        // contract — the MIXED clip only: this run carried OR
+        // transcoded a frame — the R6 clause; the raw-only clip never
+        // gains the section, the census line above is its whole
+        // delta): file / class / action / source_sha256 (the clip's
+        // frames in the collect order; the action = encoded / carried
+        // / transcoded / skipped / failed — the per-run outcome; the
+        // sha = the source bytes, the sources rows' preference
+        // order: the offload report, the read-site registry claim,
+        // the write-site streaming read, the named absence). The
+        // carried frame's verify is the source-sha match (never a
+        // decode — the decode-side verify of a carried frame is the
+        // fp-camera lossless decode's scope); the transcoded frame's verify is the
+        // archive bit-exact drill on the output + the transcode-
+        // fidelity check (decode(output) == the decoded input plane,
+        // pixel-exact — the R1); the encoded frame's verify
+        // is the existing bit-exact round-trip.
+        let carried_total: u64 = car_count.values().sum();
+        let transcoded_total: u64 = trans_count.values().sum();
+        if carried_total > 0 || transcoded_total > 0 {
+            md.push_str("\n## frameclass — the per-frame provenance (the mixed-compression contract)\n");
+            md.push_str("file\tclass\taction\tsource_sha256\n");
+            for (rel, cl, action, sha) in &prov {
+                md.push_str(&format!("{rel}\t{}\t{}\t{sha}\n", cl.name(), action));
+            }
+            md.push_str("note: the carried frame's verify = the source-sha match (the byte copy — never a decode; the decode-side verify of a carried frame is the fp-camera lossless decode's scope) · the transcoded frame's verify = the archive bit-exact drill on the output + the transcode-fidelity check (decode(output) == the decoded input plane, pixel-exact — the output differs from the source by design) · the temporal-verified tile's verify = the decoded plane matched the decoded same-class neighbor's tile plane within the pinned bound (FP_TEMPORAL_MAX_DELTA = 256 — the whole-body drill divergence, the temporal-oracle class) · the encoded frame's verify = the existing bit-exact round-trip · the sha = the source bytes (the read-site registry claim, the write-site streaming fallback, the named absence `-`)\n");
         }
         let path = output.join(per_clip_report_name(&c.clip));
         std::fs::write(&path, md)
@@ -2003,5 +2197,176 @@ mod tests {
         assert!(t.contains("files: 2 ok: 1 dirty: 1"), "{t}");
         assert!(!t.contains("created:"), "per-clip: no wall clock (C4):\n{t}");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// R7 test 5 — the carry provenance + the byte identity (corpus
+    /// conditional — skip if the 3-frame A001_013 mirror is absent,
+    /// the fresh-checkout skip pattern). The mixed-clip encode
+    /// end-to-end (the contract accepted):
+    /// - the fp frames are carried BYTE-EXACT (the output sha256 ==
+    ///   the source sha256 — the tmp+rename write path copies the
+    ///   source bytes; zero decode, zero encode);
+    /// - the raw frame is encoded into the measured archive structure
+    ///   (482×272 @ 3856×2170 — 64 tiles, compression 7);
+    /// - the per-clip report carries the class census line (the
+    ///   raw-only clip's delta = this line alone) + the per-frame
+    ///   provenance section (the mixed-only surface, the carried
+    ///   frames' source sha256);
+    /// - the ingest manifest's per-clip `clip_class:` line is the
+    ///   additive field (the fields are unchanged).
+    #[test]
+    fn carry_provenance_and_byte_identity() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let input = std::path::Path::new("../testdata/originals/A001_013");
+        if !input.is_dir() {
+            eprintln!("skip: no A001_013 testdata corpus");
+            return;
+        }
+        let srcs = [
+            "A001_013_20260930_000001.DNG",
+            "A001_013_20260930_000002.DNG",
+            "A001_013_20260930_000723.DNG",
+        ];
+        for s in &srcs {
+            assert!(input.join(s).is_file(), "the corpus frame is missing: {s}");
+        }
+        let tmp = std::env::temp_dir().join(format!("frameprism-carry-{}", std::process::id()));
+        let out = tmp.join("out");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&out).unwrap();
+        // The in-process profile set (the test's stand-in for
+        // FRAMEPRISM_PROFILES — the camera identity's resolution is
+        // the CWD/probe candidates otherwise; the override is the
+        // process-global slot, the Once idempotent).
+        crate::worker::testutil::camera_profile_override();
+        // The 3-frame corpus has a FRAME_GAP (frames 1, 2, 723) — the
+        // continuity classes are waived via the `--subset` flag (the
+        // sticky process-wide flag, no reset — no existing test
+        // asserts continuity via `process_dir`, so the sticky set is
+        // safe; documented). The class contract + the census are the
+        // full-clip surfaces — the sparse gate skips the contract
+        // check (the sparse sample's class set is structurally
+        // unrepresentative), which is exactly the path under test's
+        // complement: the ENCODE path's contract (the pre-sample
+        // census + the policy dispatch) is exercised in full.
+        crate::worker::set_subset_flag(true);
+        // The transcode default moved this test's behavior: the fp ×
+        // lossless cell is now the TRANSCODE default; the assertions
+        // below describe the `--carry` opt-in (the carry contract,
+        // kept verbatim) — the process-wide flag is set explicitly
+        // (the default-moved rewire; every assertion unchanged; the
+        // sticky set is safe — no other test encodes a mixed clip,
+        // and the flag is a no-op outside the fp-camera class).
+        crate::worker::set_carry_flag(true);
+        let rep = crate::worker::process_dir(
+            input,
+            &out,
+            true, // verify (the carried frames' verify = the source-sha match)
+            false, // force
+            2, // jobs
+            crate::worker::Mode::Lossless,
+            false, // downscale
+            false, // fast
+            false, // checksums
+            crate::worker::LossyFormat::K34892,
+            &crate::worker::ReferenceDctOpts {
+                reference_ref: None,
+                reference_mae_tsv: None,
+                reference_structure_tsv: None,
+            },
+            None, // to
+            false, // qc_gate
+        )
+        .expect("the mixed clip encodes (the {raw, fp-camera} contract is accepted)");
+        assert_eq!(rep.outcomes.len(), 3, "all 3 frames processed: {rep:?}");
+        assert!(
+            rep.outcomes.iter().all(|o| matches!(o, crate::worker::Outcome::Done(_))),
+            "all 3 frames DONE (2 carried + 1 encoded): {rep:?}"
+        );
+
+        // The byte identity: the carried outputs' sha256 == the
+        // sources' (the tmp+rename write path copied the source
+        // bytes — the carry's contract).
+        for s in [&srcs[0], &srcs[2]] {
+            let (_size, src_sha, _crc) =
+                crate::jxl::digest_stream_path(&input.join(s)).unwrap();
+            let (_size, out_sha, _crc) =
+                crate::jxl::digest_stream_path(&out.join(s)).unwrap();
+            assert_eq!(
+                src_sha, out_sha,
+                "the carried frame {s} is byte-identical to the source (the sha256 match — never a decode)"
+            );
+        }
+        // The encoded frame: a different byte stream (it was encoded),
+        // the measured archive structure (482×272 @ 3856×2170 — 64
+        // tiles, compression 7, single-sample 12-bit).
+        let enc_path = out.join(srcs[1]);
+        let enc_buf = std::fs::read(&enc_path).unwrap();
+        let meta = crate::tiff::read_meta(&enc_buf).expect("the encoded frame parses (the meta shape)");
+        let tag = |t: u16| {
+            meta.ifd0
+                .entries
+                .iter()
+                .find(|e| e.tag == t)
+                .expect("the tag is present")
+        };
+        assert_eq!(tag(259).value_raw, 7u32.to_le_bytes(), "compression 7 (the tag-7 archive shape)");
+        assert_eq!(tag(259).count, 1, "the compression's inline count-1 (the classifier's readability)");
+        assert_eq!(tag(322).value_raw, 482u32.to_le_bytes(), "tile width 482 (the measured archive grid)");
+        assert_eq!(tag(323).value_raw, 272u32.to_le_bytes(), "tile height 272 (the measured archive grid)");
+        assert_eq!(tag(324).count, 64, "64 tiles (the expected tiling on 3856×2170)");
+        let (_size, src_sha, _crc) = crate::jxl::digest_stream_path(&input.join(srcs[1])).unwrap();
+        let (_size, out_sha, _crc) = crate::jxl::digest_stream_path(&enc_path).unwrap();
+        assert_ne!(src_sha, out_sha, "the encoded frame is a fresh byte stream (not a copy)");
+
+        // The per-clip report (the flat clip's key = the empty
+        // string): the class census line (the per-class counts + the
+        // per-run carried/encoded split + the carried bytes — the
+        // exact census, the 2 fp frames' source sizes) + the
+        // per-frame provenance section (the mixed-only surface —
+        // the carried frames' source sha256 + the verify-semantics
+        // note).
+        let report_path = out.join(".frameprism-report.md");
+        let t = std::fs::read_to_string(&report_path).expect("the per-clip report is written");
+        let carried_bytes = std::fs::metadata(input.join(srcs[0])).unwrap().len()
+            + std::fs::metadata(input.join(srcs[2])).unwrap().len();
+        assert!(
+            t.contains(&format!(
+                "class census: raw-uncompressed 1 (encoded 1 · carried 0) · fp-camera-lossless 2 (encoded 0 · carried 2) — carried bytes {carried_bytes}"
+            )),
+            "the class census line (the per-class count + the per-run split + the exact carried bytes):\n{t}"
+        );
+        assert!(
+            t.contains("## frameclass — the per-frame provenance"),
+            "the provenance section (the mixed-only surface — the carried > 0):\n{t}"
+        );
+        for s in [&srcs[0], &srcs[2]] {
+            let (_size, sha, _crc) = crate::jxl::digest_stream_path(&input.join(s)).unwrap();
+            assert!(
+                t.contains(&format!("{s}\tfp-camera-lossless\tcarried\t{sha}")),
+                "the carried frame {s}'s provenance row (the source sha256):\n{t}"
+            );
+        }
+        let (_size, enc_src_sha, _crc) =
+            crate::jxl::digest_stream_path(&input.join(srcs[1])).unwrap();
+        assert!(
+            t.contains(&format!("{}\traw-uncompressed\tencoded\t{}", srcs[1], enc_src_sha)),
+            "the encoded frame's provenance row (the class + the action + the source sha):\n{t}"
+        );
+        assert!(
+            t.contains("the carried frame's verify = the source-sha match"),
+            "the verify-semantics note (the decode-side verify is the fp-camera lossless decode's scope):\n{t}"
+        );
+
+        // The ingest manifest's per-clip `clip_class:` line (the
+        // additive field — the class set + the per-class counts;
+        // the fields are unchanged).
+        let manifest = std::fs::read_to_string(out.join("A001_013.ingest-manifest.tsv")).expect("the ingest manifest is written");
+        assert!(
+            manifest.contains("clip_class: . = {fp-camera-lossless, raw-uncompressed} (3 frame(s): fp-camera-lossless 2, raw-uncompressed 1)"),
+            "the per-clip clip_class line (the class set + the counts — the string-keyed census, the alphabetical class order):\n{manifest}"
+        );
+        assert!(manifest.contains("version: 1"), "the manifest's fields are unchanged: \n{manifest}");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

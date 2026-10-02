@@ -38,7 +38,7 @@ pub use self::checksums::{
 };
 pub use self::encode::{
     CoreFrame, LossyFormat, MemFrame, Mode, ReferenceDctOpts, ReferenceStructure,
-    encode_frame_memory, vctx,
+    carry_flag, encode_frame_memory, set_carry_flag, set_trial_flag, trial_flag, vctx,
 };
 pub(crate) use self::encode::is_archive_layout;
 pub use self::ingest::{

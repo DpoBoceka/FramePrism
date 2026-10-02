@@ -6,6 +6,16 @@
 // (b) in golden mode the native winner must equal the golden tile bytes
 // (the 0.1.0 adaptive output). Nonzero exit on any mismatch.
 //
+// RUN TARGET (the Stage-1 re-point — named in the pin's note
+// chain): the pre-Stage-1 byte-parity contract lives
+// on the `--trial` path — the base default's 3-candidate size-min trial,
+// byte-frozen (the Stage-1 selection-default flip moved the 482 grid's
+// DEFAULT to the fixed single W7 candidate; the trial — and with it
+// this gate's winner comparison — is the `--trial` flag's contract now).
+// This bin runs the trial path in-process (encode_tile_candidates is
+// UNCHANGED), so its checks are the `--trial` output's parity contract
+// with no code change.
+//
 // CLI:
 //   m1gate --orig <frame.dng> --golden <frame.dng> [--prec 12]
 //   m1gate --orig <frame.dng> [--prec 12|10]           (libjpeg mode)

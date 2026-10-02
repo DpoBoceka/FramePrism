@@ -123,6 +123,11 @@ pub fn process_dir(
     to: Option<&Path>,
     qc_gate: bool,
 ) -> Result<Report> {
+    //: the profiler gate (the `FRAMEPRISM_PROFILE` env,
+    // read ONCE at the run entry — the CARRY_FLAG pattern's
+    // run-entry form; absent / other = INACTIVE — the default run is
+    // the byte-frozen no-op):
+    crate::profile::init_from_env();
     std::fs::create_dir_all(output)
         .with_context(|| format!("create output dir {}", output.display()))?;
 
@@ -215,6 +220,19 @@ pub fn process_dir(
             })?,
         )
     };
+    // The per-frame class from the pre-pass meta (R2/R3):
+    // the temporal-oracle resolver's clip list (the pre-pass-
+    // classified class the resolver's candidate check needs — zero
+    // extra I/O: the meta is the pre-pass's own read). Keyed by the
+    // src path (the process closure's key). Every frame that reaches
+    // the process closure has an entry (the failure paths `continue`
+    // to a camera-gate FAIL — the run aborts before the encode loop;
+    // the map is complete when it is used). Empty when `profiles`
+    // is `None` (the frames list is empty then — the map is unused).
+    let mut frame_classes: std::collections::BTreeMap<
+        PathBuf,
+        crate::frameclass::FrameClass,
+    > = std::collections::BTreeMap::new();
     if let Some(set) = &profiles {
         let mut camera_failures: Vec<String> = Vec::new();
         for (src, _) in &frames {
@@ -236,14 +254,61 @@ pub fn process_dir(
                     continue;
                 }
             };
-            let meta = match crate::tiff::read_meta(&buf) {
-                Ok(m) => m,
+            // The identity buffer + the parsed IFD (the bounded prefix
+            // pair). The named FENCE EXCEPTION: the fp camera's frames
+            // place the IFD at the FILE
+            // TAIL (the measured ~4.4 MB offset), beyond the 1 MiB
+            // detection prefix — the parse fails with the OUT-OF-WINDOW
+            // class only (`ParseError::BadIfdOffset` — the beyond-buffer
+            // class; the malformed classes — NotTiff / ImplausibleCount /
+            // UnknownFieldType / IfdStructureOutOfBounds /
+            // RegionOutOfBounds / MissingTag — stay the named FAIL
+            // below, never retried). The retry = the full-file read +
+            // this named note line (the checksums full-read note
+            // vocabulary: `note: {path} — {reason}; reading the full
+            // file`), then the identity on the full buffer. Byte-identity
+            // note: a raw frame parses within the prefix — this
+            // fallback never fires on them (the two-binary control's
+            // byte-equality covers the raw path).
+            let (meta, id_buf) = match crate::tiff::read_meta(&buf) {
+                Ok(m) => (m, std::borrow::Cow::Borrowed(buf.as_slice())),
+                Err(crate::tiff::ParseError::BadIfdOffset(_, _)) => {
+                    eprintln!(
+                        "note: {} — the camera-identity IFD beyond the 1 MiB detection prefix; reading the full file",
+                        src.display()
+                    );
+                    let full = match std::fs::read(src) {
+                        Ok(b) => b,
+                        Err(err) => {
+                            camera_failures.push(format!(
+                                "FAIL {file}: camera identity: read {} (the full-file retry): {err}",
+                                src.display()
+                            ));
+                            continue;
+                        }
+                    };
+                    match crate::tiff::read_meta(&full) {
+                        Ok(m) => (m, std::borrow::Cow::Owned(full)),
+                        Err(err) => {
+                            camera_failures.push(format!("FAIL {file}: camera identity: {err}"));
+                            continue;
+                        }
+                    }
+                }
                 Err(err) => {
                     camera_failures.push(format!("FAIL {file}: camera identity: {err}"));
                     continue;
                 }
             };
-            let ident = match crate::camera::identity_from_ifd0(&meta.ifd0, &buf) {
+            // The frame's class from the pre-pass meta (the
+            // temporal-oracle resolver's clip list; the classify reads
+            // the IFD0 only — the meta is already parsed for the
+            // identity check).
+            frame_classes.insert(
+                src.clone(),
+                crate::frameclass::classify(&meta),
+            );
+            let ident = match crate::camera::identity_from_ifd0(&meta.ifd0, id_buf.as_ref()) {
                 Ok(i) => i,
                 Err(err) => {
                     camera_failures.push(format!("FAIL {file}: camera identity: {err}"));
@@ -545,6 +610,13 @@ pub fn process_dir(
         );
     }
 
+    //: the profiler sidecar (the env-gated measurement
+    // surface — the gate OFF = the no-op guard, zero default
+    // change): the per-frame phase rows land in
+    // `<dest>/.frameprism-profile.tsv` (the dotfile-sidecar
+    // pattern); the RAII guard closes (flushes) the writer at the
+    // run's end on EVERY path.
+    let _profile_sidecar = crate::profile::open_sidecar(output);
     let t0 = Instant::now();
     //: the encode + the per-frame sidecar append + the status
     // lines. The POSITIONAL outcome order (the frames order) is the
@@ -553,6 +625,36 @@ pub fn process_dir(
     // partition before it), so the order is preserved by the
     // par_iter().collect() contract.
     let total_frames = frames.len();
+    // The temporal-oracle resolver's clip list (R2/R3):
+    // the clip's frames as (path relative to the input root, the
+    // pre-pass class, the ordinal from the frame field) — the
+    // resolver's candidate domain (built once; the frames are stable
+    // for the run). An `Unknown` class (the map's absent key —
+    // unreachable: the camera gate runs before this and aborts on a
+    // pre-pass failure) degrades the candidate to a skip (the
+    // resolver's class guard).
+    let oracle_clip: Vec<(
+        PathBuf,
+        crate::frameclass::FrameClass,
+        Option<u64>,
+    )> = frames
+        .iter()
+        .map(|(src, _)| {
+            let rel = src
+                .strip_prefix(input)
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|_| src.clone());
+            let class = frame_classes
+                .get(src)
+                .copied()
+                .unwrap_or(crate::frameclass::FrameClass::Unknown);
+            let ord = src
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(crate::worker::checksums::frame_number_from_stem);
+            (rel, class, ord)
+        })
+        .collect();
     let done_count = std::sync::atomic::AtomicUsize::new(0);
     let process = |src: &Path, dst: &Path| -> Outcome {
         // The sidecar row key (the output-relative frame path, POSIX —
@@ -581,6 +683,10 @@ pub fn process_dir(
                 );
                 emit_frame_line(src, dst, input, output, true, &done_count, total_frames, est_eta_s, &t0);
                 crate::live::note_skipped();
+                //: the profiler's resume-skip honest no-row
+                // contract (the named form: a resume-skipped frame
+                // writes NO row — the defensive clear, never a row):
+                crate::profile::clear_frame();
                 return Outcome::Skipped {
                     file: src
                         .file_name()
@@ -589,6 +695,41 @@ pub fn process_dir(
                     in_bytes: std::fs::metadata(src).map(|m| m.len()).unwrap_or(0),
                 };
             }
+        }
+        // The temporal-oracle ctx (the per-frame slot of the
+        // transcode path): for a pre-pass-classified fp-camera-lossless
+        // frame, the resolver is set BEFORE the encode (the disputed
+        // whole-body tile is accepted only via a verified same-class
+        // neighbor in band within the pinned bound) + cleared AFTER on
+        // EVERY path (`process_one` returns the error into
+        // `Outcome::Failed` — nothing panics past this clear; the ctx
+        // never leaks into the next frame's measurement on this
+        // thread). For every non-fp frame: the no-ctx default (the
+        // strict drill stands — the byte-frozen path). The slot is
+        // THREAD-LOCAL (the slot contract — the
+        // process-wide static raced the sibling frames' set/clear on
+        // the rayon worker threads under the DEFAULT jobs; the
+        // thread-local scopes the set/clear to this closure's thread
+        // and `process_one` runs synchronously on it — works at every
+        // jobs, incl. 0 = the full pool). The verified count is noted
+        // to the census registry BEFORE the clear (the same thread —
+        // the thread-local slot the closure just set; the report's
+        // census write site claims it per sidecar row key — the 123
+        // shape stands when n = 0, byte-frozen).
+        let fp_frame = frame_classes
+            .get(src)
+            .copied()
+            == Some(crate::frameclass::FrameClass::FpCameraLossless);
+        if fp_frame {
+            let name = src
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            crate::decode::set_fp_temporal_oracle(Some(
+                crate::worker::encode::fp_temporal_resolver(input, &oracle_clip, &name),
+            ));
+        } else {
+            crate::decode::set_fp_temporal_oracle(None);
         }
         let outcome = process_one(
             src,
@@ -603,6 +744,15 @@ pub fn process_dir(
             Some(&rel),
             profiles.as_ref(),
         );
+        if fp_frame {
+            let n = crate::decode::fp_temporal_verified_count();
+            crate::decode::set_fp_temporal_oracle(None);
+            if n > 0 {
+                crate::worker::encode::note_fp_temporal_verified(&rel, n);
+            }
+        } else {
+            crate::decode::set_fp_temporal_oracle(None);
+        }
         //: the live metrics sampling (the extended per-frame
         // stdout line for a Done frame — the running-ETA observation;
         // a Skipped/Failed frame counts for `left` + advances the delta
@@ -652,6 +802,17 @@ pub fn process_dir(
             }
         }
         emit_frame_line(src, dst, input, output, false, &done_count, total_frames, est_eta_s, &t0);
+        //: the profiler's per-frame sidecar flush (every
+        // path — Done + Failed: a frame that fails after its read
+        // writes the phases it completed; the gate OFF = one atomic
+        // load, no allocation, no write):
+        if crate::profile::active() {
+            crate::profile::flush_frame(
+                &src.file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            );
+        }
         outcome
     };
     let outcomes: Vec<Outcome> = if jobs > 0 {

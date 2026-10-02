@@ -215,6 +215,49 @@ pub const GATE_UHD_H: u32 = 2170;
 /// 964×272 grid to `CANDIDATES` — no separate family constant).
 pub const GATE_UHD_TILE_W_10: u32 = 964;
 
+/// The fp-camera lossless shape (the A001_013 tag-7 class
+/// fingerprint, the census + the conformance KAT): the 512×368
+/// FULL-NOMINAL 8×6 = 48-tile grid at 12 bps on the 3856×2170 readout
+/// (3856 = 7×512 + 272 — the right column 272 px; 2170 = 5×368 + 330 —
+/// the last row 330 px: the ragged-edge tiles carry the off-frame
+/// padding INSIDE the full-nominal stream, and every tile decodes as
+/// the full 512×368 plane — 256×368 per component, the even/odd COLUMN
+/// split). Class-keyed: the decode eligibility (R1) + the class-keyed
+/// container check (R2) + the bounded-tail drill (R4)
+/// all fire on this measured fingerprint, not on a depth/mode gate
+/// (the fp frames are the CAMERA's own lossless output — a distinct
+/// class from the tool's own archive output, which rides the existing
+/// arms + the bit-exact drill unchanged).
+pub const FP_CAMERA_TILE_W: u32 = 512;
+pub const FP_CAMERA_TILE_H: u32 = 368;
+pub const FP_CAMERA_BPS: u32 = 12;
+/// The fp-camera grid cell count (8×6 = 48 — the tag-324/325 count the
+/// generic grid-cells bail rides, unchanged).
+pub const FP_CAMERA_TILES: u32 = 48;
+
+/// The fp-camera shape predicate: TRUE iff the frame is the
+/// measured 3856×2170 × 512×368 × 12-bps fp-camera lossless shape. The
+/// decode-side eligibility arm (R1) + the class-keyed container check
+/// (R2) + the bounded-tail drill (R4) all key on this. The frame
+/// geometry (3856×2170) is the existing `GATE_UHD_W`/`GATE_UHD_H`
+/// readout (the fp camera reads out at the UHD geometry); the
+/// DISTINGUISHING fingerprint is the 512×368 tile grid + the 12 bps
+/// (the tool's own 3856×2170 archive output is the 964×272 / 482×272
+/// grid — never the 512×368 grid). A 512×368 grid at any OTHER frame
+/// geometry (or a different bps) is NOT this class (the existing named
+/// refusal — the R1 KAT's "512×368 at a NON-fp geometry" pin).
+pub fn is_fp_camera_shape(
+    frame_w: u32,
+    frame_h: u32,
+    tile_w: u32,
+    tile_h: u32,
+    bps: u32,
+) -> bool {
+    (frame_w, frame_h) == (GATE_UHD_W, GATE_UHD_H)
+        && (tile_w, tile_h) == (FP_CAMERA_TILE_W, FP_CAMERA_TILE_H)
+        && bps == FP_CAMERA_BPS
+}
+
 /// Per-gate tile geometry (the measured reference contract): the
 /// 3024×2010 Open Gate 3K frame uses the 252×252 grid; every other
 /// geometry keeps the 482×272 grid (the byte-invariance contract).
@@ -456,6 +499,21 @@ impl Grid {
             th,
         }
     }
+}
+
+/// The 482×272 archive grid (the legacy `TILE_W`×`TILE_H` contract —
+/// the A001 full-resolution rows; the `CANDIDATES` family's grid). The
+/// Stage-1 fast-default flip's scope predicate: on this grid
+/// the no-flag default routes through the shipped `--fast` selection
+/// (the family's fixed W7 head — `encode_tile_fast`), and the `--trial`
+/// flag restores the base default's 3-candidate size-min trial
+/// (byte-frozen — the pre-Stage-1 byte-parity contract, whose
+/// measured 2.67× workload factor the flip names as the give-up). Every
+/// other grid's shipped selection discipline is UNTOUCHED (the other
+/// grids' byte-invariance pin — the 3K gate's measured bit-count key,
+/// the FHD / OG2K / ds2x families' shipped contracts).
+pub fn is_482_grid(g: &Grid) -> bool {
+    (g.tw, g.th) == (TILE_W, TILE_H)
 }
 
 /// The mosaic region covered by tile (r, c): row-major grid, last row/col
@@ -701,6 +759,121 @@ pub fn tile_from_planes(p: &Planes) -> Result<Vec<u16>, TileError> {
                 out[y * tw as usize + 2 * x + 1] = p.odd[y * cols_u + x];
             }
         }
+    }
+    Ok(out)
+}
+
+/// Decode an fp-camera FULL-NOMINAL tile (R3) and return the
+/// `rect`-sized VISIBLE plane (the top-left `rect.tw × rect.tl` of the
+/// nominal `nominal_tw × th` plane — the PADDING CLIP).
+///
+/// The fp-camera stream is ALWAYS the full `nominal_tw × th` nominal
+/// tile (256×368 per component — the even/odd COLUMN split), even for
+/// the ragged-edge tiles (the right-column 272-wide and the bottom-row
+/// 330-tall tiles): the off-frame padding (the columns ≥ the frame's
+/// 3856, the rows ≥ the frame's 2170) is REAL stored data INSIDE the
+/// stream. So the plane geometry is the NOMINAL 512×368 — NOT the
+/// visible rect. The archive `decode_tile`'s geometry check validates
+/// against `rect.tw` and would reject the full-nominal fp stream on the
+/// ragged-edge tiles (`GeometryMismatch` — the wall-3 the R3 seam
+/// removes): this seam instead validates against the nominal geometry
+/// (the stream's own shape) and then clips the visible rect.
+///
+/// The assembly (R3) + the bounded-tail drill (R4) both ride this seam:
+/// the assembly passes the visible `rect` (the clip to the frame);
+/// the drill passes the full `nominal_tw × th` rect (the full plane —
+/// the re-encode source). The even/odd COLUMN split + the ljpeg_ref
+/// golden-model decode are the SAME as `decode_tile` (the proven
+/// recombine — the conformance KAT's pixel-exact canary rides it).
+pub fn decode_tile_full_nominal(
+    jpeg: &[u8],
+    rect: &TileRect,
+    expected_precision: u32,
+    nominal_tw: u32,
+    th: u32,
+) -> Result<Vec<u16>, TileError> {
+    let (info, comps) = crate::ljpeg_ref::decode(jpeg)
+        .map_err(|e| TileError::Decode(format!("golden-model (ljpeg_ref) decode: {e}")))?;
+    reassemble_full_nominal(&info, &comps, rect, expected_precision, nominal_tw, th)
+}
+
+/// Decode an fp-camera FULL-NOMINAL tile through the NATIVE FAST
+/// golden-model path (`fastdec` — the table-driven T.81 decoder that
+/// implements the `ljpeg_ref` contract — identical accept/reject,
+/// planes, and errors, pinned by the equivalence KATs) and return the
+/// `rect`-sized VISIBLE plane (the top-left `rect.tw × rect.tl` of the
+/// nominal `nominal_tw × th` plane — the PADDING CLIP). The
+/// input/output contract is the SAME as `decode_tile_full_nominal`
+/// (the reference-model path); the failure wording is intentionally
+/// invariant across the two paths (the failure-surface byte-identity —
+/// the golden-model decode failure names the contract, and the
+/// reference model stays the named authority of that contract).
+pub fn decode_tile_full_nominal_fast(
+    jpeg: &[u8],
+    rect: &TileRect,
+    expected_precision: u32,
+    nominal_tw: u32,
+    th: u32,
+) -> Result<Vec<u16>, TileError> {
+    let (info, comps) = crate::fastdec::decode(jpeg)
+        .map_err(|e| TileError::Decode(format!("golden-model (ljpeg_ref) decode: {e}")))?;
+    reassemble_full_nominal(&info, &comps, rect, expected_precision, nominal_tw, th)
+}
+
+/// The shared reassemble tail of the two full-nominal decode seams
+/// (the reference-model + the native fast path): the nf/precision
+/// validation + the even/odd COLUMN recombine to the nominal plane +
+/// the visible-rect clip (the reference model's `decode_tile_full_nominal`
+/// logic, factored so the two decode paths cannot drift apart).
+fn reassemble_full_nominal(
+    info: &crate::ljpeg_ref::RefFrame,
+    comps: &[Vec<u16>],
+    rect: &TileRect,
+    expected_precision: u32,
+    nominal_tw: u32,
+    th: u32,
+) -> Result<Vec<u16>, TileError> {
+    if info.nf != 2 {
+        return Err(TileError::Decode(format!(
+            "expected 2 components, got {}",
+            info.nf
+        )));
+    }
+    if info.precision != expected_precision {
+        return Err(TileError::Decode(format!(
+            "expected {expected_precision}-bit precision, got {}",
+            info.precision
+        )));
+    }
+    // The FULL-NOMINAL plane: the even/odd COLUMN recombine to
+    // nominal_tw × th (the fp stream is the full tile — the ragged-edge
+    // padding is inside the stream). `tile_from_planes` validates the
+    // component geometry against the NOMINAL rect (the stream's own
+    // shape — NOT the visible rect).
+    let full = tile_from_planes(&Planes {
+        rect: TileRect {
+            x0: rect.x0,
+            y0: rect.y0,
+            tw: nominal_tw,
+            tl: th,
+        },
+        rows: info.height,
+        cols: info.width,
+        th,
+        even: comps[0].clone(),
+        odd: comps[1].clone(),
+    })?;
+    // The PADDING CLIP: the visible region is the top-left `rect.tw ×
+    // rect.tl` of the nominal plane (the interior tile = the full plane
+    // — no clip; the ragged-edge tiles = the clipped corner).
+    if rect.tw >= nominal_tw && rect.tl >= th {
+        return Ok(full);
+    }
+    let mut out = vec![0u16; (rect.tw * rect.tl) as usize];
+    for y in 0..rect.tl as usize {
+        let src = y * nominal_tw as usize;
+        out[y * rect.tw as usize..y * rect.tw as usize + rect.tw as usize]
+            .copy_from_slice(&full[src..src + rect.tw as usize]);
     }
     Ok(out)
 }
@@ -2164,5 +2337,235 @@ mod tests {
         assert_eq!(engine_from(Some("FFI")), Engine::Ffi, "case-insensitive");
         assert_eq!(engine_from(Some("libjpeg")), Engine::Ffi);
         assert_eq!(engine_from(Some("legacy")), Engine::Ffi);
+    }
+
+    /// The fp full-nominal plane (the deterministic test content — the
+    /// decode.rs's `fp_test_plane` pattern, re-derived here so the
+    /// equivalence KATs stand in this module): 512×368, the phase-
+    /// stratified + jittered 12-bit content (the decode-side KAT's
+    /// synthetic-stream source).
+    fn fp_equiv_plane() -> Vec<u16> {
+        (0..(512 * 368) as usize)
+            .map(|i| {
+                let x = i % 512;
+                let y = i / 512;
+                let phase = if (x + y) % 2 == 0 { 2000u16 } else { 1500 };
+                (phase + (i as u16 % 97)) % 4096
+            })
+            .collect()
+    }
+
+    /// The native-fast vs reference-model equivalence over a SYNTHETIC
+    /// stream battery (camera-free): every stream is built from the
+    /// product's own seams (the natural-PSV1 full-nominal tile re-encode
+    /// at the fp precision + the psv/precision sweep), then corrupted in
+    /// the pinned ways (the prefix flip, the mid-scan flip, the
+    /// truncation ladder, the all-FF / all-zero / SOI-only / SOF0 /
+    /// marker-past-EOF classes). The contract asserted per stream: the
+    /// SAME verdict (both accepted → the same frame facts + the same
+    /// planes; both refused → the same error Display string, incl. the
+    /// offsets) — the reference model stays the acceptance authority,
+    /// the fast path is a faster implementation of the same model,
+    /// never a second opinion.
+    #[test]
+    fn kat_fastdec_equivalence_synthetic() {
+        let full_rect = TileRect { x0: 0, y0: 0, tw: 512, tl: 368 };
+        let plane = fp_equiv_plane();
+        let mut streams: Vec<(String, Vec<u8>)> = vec![];
+        // The good streams (the psv × precision sweep — the fp format
+        // is the prec-12 natural-PSV1 stream; the sweep covers the
+        // decoder's generic contract).
+        let mut good: Vec<u8> = vec![];
+        for prec in [10u32, 12] {
+            let scaled: Vec<u16> = if prec == 10 {
+                plane.iter().map(|&v| (v % 1024) as u16).collect()
+            } else {
+                plane.clone()
+            };
+            let planes =
+                planes_from_tile_rows(&scaled, &full_rect, 368, Orient::Natural).unwrap();
+            for psv in 1..=7 {
+                let tile = encode_tile_planes(&planes, prec, psv).unwrap();
+                if prec == 12 && psv == 1 {
+                    good = tile.clone();
+                }
+                streams.push((format!("good psv{psv} prec{prec}"), tile));
+            }
+        }
+        assert!(!good.is_empty(), "the prec-12 N1 good tile is built (the sweep)");
+        // The corruption battery (derived from the good prec-12 N1 tile).
+        let mut prefix_flip = good.clone();
+        prefix_flip[12] ^= 0x01; // the SOF3 component-descriptor byte (inert to the decode)
+        streams.push(("prefix flip (SOF3 selector)".into(), prefix_flip));
+        let mid = good.len() / 2;
+        let mut mid_flip = good.clone();
+        mid_flip[mid] ^= 0x40;
+        streams.push(("mid-scan byte flip".into(), mid_flip));
+        let mut late_flip = good.clone();
+        late_flip[good.len() - 6] ^= 0xFF;
+        streams.push(("late-scan byte flip".into(), late_flip));
+        // The truncation ladder (the marker header, the DHT mid, the
+        // SOS, the scan head, the scan mid, the scan tail, the EOI).
+        for (name, frac) in [
+            ("trunc @ marker", 4usize),
+            ("trunc @ DHT mid", good.len() / 3),
+            ("trunc @ SOS", 85),
+            ("trunc @ scan head", good.len() * 90 / 100),
+            ("trunc @ scan mid", good.len() / 2),
+            ("trunc @ scan tail", good.len() - 3),
+            ("trunc @ EOI", good.len() - 2),
+        ] {
+            let l = frac.min(good.len());
+            streams.push((name.into(), good[..l].to_vec()));
+        }
+        streams.push(("all 0xFF".into(), vec![0xFF; 64]));
+        streams.push(("all zero".into(), vec![0u8; 64]));
+        streams.push(("SOI only".into(), vec![0xFF, 0xD8]));
+        streams.push((
+            "SOF0 (baseline DCT)".into(),
+            vec![
+                0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01,
+                0x11, 0x00,
+            ],
+        ));
+        streams.push(("marker len past EOF".into(), vec![0xFF, 0xD8, 0xFF, 0xC3, 0x00, 0x80]));
+        streams.push(("EOI before SOS".into(), vec![0xFF, 0xD8, 0xFF, 0xD9]));
+        for (name, s) in &streams {
+            let r = crate::ljpeg_ref::decode(s);
+            let f = crate::fastdec::decode(s);
+            match (r, f) {
+                (Ok((rf, rp)), Ok((ff, fp))) => {
+                    assert_eq!(rf, ff, "[{name}]: the frame facts must agree");
+                    assert_eq!(rp, fp, "[{name}]: the planes must be bit-exact");
+                }
+                (Err(re), Err(fe)) => {
+                    assert_eq!(
+                        re.to_string(),
+                        fe.to_string(),
+                        "[{name}]: the refusal wording must be identical"
+                    );
+                }
+                (r, f) => panic!("[{name}]: verdict divergence — reference {r:?} vs fast {f:?}"),
+            }
+        }
+    }
+
+    /// The native-decode bit-exact canary over the MIRRORRED CORPUS
+    /// (both acceptance classes — the bounded-tail tiles + the
+    /// whole-body-divergent streams): every fp frame of the mirror
+    /// (the A001_013 standing + the A001_013_miniclips) decodes
+    /// through the native fast seam to the SAME planes the reference
+    /// model decodes (48/48 tiles per frame; the corpus-conditional
+    /// in-repo pattern — the named skip on a clean checkout).
+    #[test]
+    fn kat_fastdec_corpus_bit_exact_canary() {
+        let dirs = [
+            "../testdata/originals/A001_013",
+            "../testdata/originals/A001_013_miniclips",
+        ];
+        let mut frames: Vec<(String, String)> = vec![];
+        for d in dirs {
+            if let Ok(rd) = std::fs::read_dir(d) {
+                let mut names: Vec<String> = rd
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .filter(|n| n.ends_with(".DNG"))
+                    .collect();
+                names.sort();
+                for n in names {
+                    frames.push((d.to_string(), n));
+                }
+            }
+        }
+        if frames.is_empty() {
+            eprintln!("skip: no A001_013 corpus mirror (the canary is corpus-conditional)");
+            return;
+        }
+        let mut fp_frames = 0usize;
+        for (d, n) in &frames {
+            let buf = std::fs::read(std::path::Path::new(d).join(n))
+                .unwrap_or_else(|e| panic!("{n}: reads: {e}"));
+            let meta = crate::tiff::read_meta(&buf).unwrap_or_else(|e| panic!("{n}: parse: {e}"));
+            if !matches!(
+                crate::frameclass::classify(&meta),
+                crate::frameclass::FrameClass::FpCameraLossless
+            ) {
+                continue; // the raw class — the canary is the fp frame's
+            }
+            fp_frames += 1;
+            let (offs, lens) =
+                crate::decode::tile_offsets_and_lens(&meta, &buf, n)
+                    .unwrap_or_else(|e| panic!("{n}: the tile arrays read: {e}"));
+            assert_eq!(offs.len(), 48, "{n}: the fp frame carries the 48-tile grid");
+            for (i, (o, l)) in offs.iter().zip(lens.iter()).enumerate() {
+                let stored = &buf[*o as usize..*o as usize + *l as usize];
+                let r = (i / 8) as u32;
+                let c = (i % 8) as u32;
+                let rect = tile_region(3856, 2170, &Grid::for_dims(3856, 2170, 512, 368), r, c)
+                    .unwrap();
+                let full_rect = TileRect { tw: 512, tl: 368, ..rect };
+                let ref_plane = decode_tile_full_nominal(stored, &full_rect, 12, 512, 368)
+                    .unwrap_or_else(|e| panic!("{n}: tile {i}: reference decode: {e}"));
+                let fast_plane = decode_tile_full_nominal_fast(stored, &full_rect, 12, 512, 368)
+                    .unwrap_or_else(|e| panic!("{n}: tile {i}: native decode: {e}"));
+                assert_eq!(
+                    fast_plane, ref_plane,
+                    "{n}: tile {i}: the native decode must be bit-exact vs the reference model"
+                );
+            }
+        }
+        assert!(fp_frames > 0, "the corpus mirror must carry fp frames (the canary ran nothing)");
+    }
+
+    /// The whole-body-class decode pin (corpus-conditional on the three
+    /// disputed miniclip frames): the whole-body-divergent streams —
+    /// the camera encoder's non-canonical whole-body lossless coding
+    /// the reference model DECODES to the correct planes (the
+    /// adjudication's plane-level contract) — decode to the SAME planes
+    /// through the native fast path (all 48 tiles of each disputed
+    /// frame; the disputed tile itself = the one the no-ctx drill
+    /// refuses, the temporal-oracle class).
+    #[test]
+    fn kat_fastdec_whole_body_class_pin() {
+        let miniclips = std::path::Path::new("../testdata/originals/A001_013_miniclips");
+        let disputed = [
+            "A001_013_20260930_000277.DNG",
+            "A001_013_20260930_000287.DNG",
+            "A001_013_20260930_000395.DNG",
+        ];
+        if !disputed.iter().all(|n| miniclips.join(n).is_file()) {
+            eprintln!("skip: no A001_013_miniclips corpus mirror (the pin is corpus-conditional)");
+            return;
+        }
+        let grid = Grid::for_dims(3856, 2170, 512, 368);
+        for n in disputed {
+            let buf = std::fs::read(miniclips.join(n)).expect("the disputed frame reads");
+            let meta = crate::tiff::read_meta(&buf).expect("the disputed frame parses");
+            assert!(
+                matches!(
+                    crate::frameclass::classify(&meta),
+                    crate::frameclass::FrameClass::FpCameraLossless
+                ),
+                "{n}: the disputed frame is the fp camera class"
+            );
+            let (offs, lens) = crate::decode::tile_offsets_and_lens(&meta, &buf, n).expect("tiles read");
+            for (i, (o, l)) in offs.iter().zip(lens.iter()).enumerate() {
+                let stored = &buf[*o as usize..*o as usize + *l as usize];
+                let r = (i / 8) as u32;
+                let c = (i % 8) as u32;
+                let rect = tile_region(3856, 2170, &grid, r, c).unwrap();
+                let full_rect = TileRect { tw: 512, tl: 368, ..rect };
+                let ref_plane =
+                    decode_tile_full_nominal(stored, &full_rect, 12, 512, 368)
+                        .unwrap_or_else(|e| panic!("{n}: tile {i}: reference decode: {e}"));
+                let fast_plane =
+                    decode_tile_full_nominal_fast(stored, &full_rect, 12, 512, 368)
+                        .unwrap_or_else(|e| panic!("{n}: tile {i}: native decode: {e}"));
+                assert_eq!(
+                    fast_plane, ref_plane,
+                    "{n}: tile {i}: the whole-body stream must decode to the same planes on the native path"
+                );
+            }
+        }
     }
 }

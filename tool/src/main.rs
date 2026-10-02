@@ -504,6 +504,13 @@ fn main() -> ExitCode {
 
     let t0 = Instant::now();
     let codec_str = cli.codec.to_string();
+    // The Stage-1 flag-pair refusal (UNCONDITIONAL — the
+    // uniform, pinnable contract: a `--fast` + `--trial` conflict
+    // regardless of tier/grid, before any path dispatch):
+    if cli.fast && cli.trial {
+        eprintln!("{}", crate::dispatch::fast_trial_refusal());
+        return ExitCode::from(2);
+    }
     // --- --dry-run (predict-then-measure) ---------------------
     // The estimate dispatches BEFORE the pin gate / the A2 preflight /
     // the status surface / the selection: the dry run archives nothing
@@ -661,6 +668,17 @@ fn main() -> ExitCode {
     // The `--subset` NAMED opt-in (the two encode paths' gate
     // call sites read it; absent = the default hard gate).
     frameprism::worker::set_subset_flag(cli.subset);
+    // The `--carry` NAMED opt-in (the fp-camera
+    // frames' byte-exact source copy instead of the transcode default;
+    // the encode path's `run` reads it — a no-op outside the fp-camera
+    // class, the raw-only behavior untouched by construction).
+    frameprism::worker::set_carry_flag(cli.carry);
+    // The `--trial` NAMED opt-in (the Stage-1 flip: the 482
+    // grid's base default's size-min trial, byte-frozen, behind the
+    // flag; the tile loop's selection condition reads it — on the other
+    // grids it is accepted-but-inert by construction, the ds2x rows
+    // keep the trial default).
+    frameprism::worker::set_trial_flag(cli.trial);
     if matches!(cli.codec, CodecArg::J92 | CodecArg::Both) {
         let _ = frameprism::status::open();
     }

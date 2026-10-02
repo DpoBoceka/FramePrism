@@ -44,6 +44,12 @@ pub struct IngestGateReport {
     /// The reel gate (the cross-clip TC continuity — the
     /// between-clips half of 's TC contract).
     pub reel: ReelVerdict,
+    /// The per-clip class census (the mixed-compression contract —
+    /// the additive field; the per-clip order = the `clips` order:
+    /// the clip key → the class name → the frame count). The
+    /// clip-class contract's manifest + report lines render from it
+    /// (never re-derived on the write sites).
+    pub class_census: Vec<(String, std::collections::BTreeMap<String, u64>)>,
 }
 
 impl IngestGateReport {
@@ -66,12 +72,17 @@ impl IngestGateReport {
 }
 
 /// One frame's gate inputs (the file name + the parsed frame number +
-/// the TimeCodes read).
+/// the TimeCodes read + the frame class + its measured structure (the
+/// IFD-only census scan — the mixed-compression contract's pre-job
+/// refusal rides on it; the structure is the contract-domain
+/// predicate's input — the readable-compression filter)).
 #[derive(Debug)]
 struct GateFrame {
     file: String,
     num: Option<u64>,
     tc: Result<Option<Smpte12m>, String>,
+    class: crate::frameclass::FrameClass,
+    structure: crate::frameclass::FrameStructure,
 }
 
 /// The `--subset` named line (the random-subset waiver):
@@ -164,6 +175,11 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
     }
 
     let mut clips: Vec<ClipVerdict> = Vec::new();
+    // The per-clip class census (the parallel to `clips` — the
+    // mixed-compression contract's additive field; the clip order is
+    // the same BTreeMap key order).
+    let mut class_census: Vec<(String, std::collections::BTreeMap<String, u64>)> =
+        Vec::new();
     for (clip, idxs) in &by_clip {
         let mut v = ClipVerdict {
             clip: clip.clone(),
@@ -187,10 +203,21 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
                 .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default();
+            let class_scan = crate::preflight::frame_class_scan(src);
             gs.push(GateFrame {
                 file,
                 num: frame_number_from_stem(&stem),
                 tc: read_timecodes_tag(src),
+                // The frame class + structure (the IFD-only census
+                // scan — the window read + the named full-file
+                // fallback; the malformed/IO class degrades to
+                // Unknown — the named refusal class, the contract
+                // check below names it; a parse-failed frame is
+                // outside the contract's domain — the encode site's
+                // per-frame named refusal, the domain
+                // clause).
+                class: class_scan.0,
+                structure: class_scan.1,
             });
         }
         // FRAME_BADNAME (defensive): a .DNG without an all-digit final
@@ -229,6 +256,67 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
         if let (Some(first), Some(last)) = (ordered.first(), ordered.last()) {
             v.frame_range = Some((first.num.unwrap(), last.num.unwrap()));
         }
+        // The clip class contract (the mixed-compression contract —
+        // R2's executable half): the allowed per-clip class SETS are
+        // {raw-uncompressed} (the existing class) + the mixed
+        // {raw-uncompressed, fp-camera-lossless} set (A001_013's
+        // shape); any other non-empty set = the clip level's NAMED
+        // refusal (the pinned R5 wording — the 0-frames-touched
+        // pre-job refusal, the established mechanism: the line rides
+        // the per-clip failures + the run summary + rc!=0, before any
+        // frame processing). SCOPE (the amended
+        // R1/R2 domain clause): the set = the classes of the frames
+        // WITH a readable compression structure (`in_contract_domain`);
+        // a parse-failed frame (e.g. the strict parse's
+        // `MissingTag(259)`) does not enter the set — it stays on the
+        // existing per-frame named refusal at the encode site (the
+        // corrupt-frame semantics — byte-invariant, zero new
+        // wordings); an empty set (no readable-compression frame) is
+        // outside the contract's domain — the existing behavior
+        // stands. The FULL-CLIP gate only (the `--subset`
+        // re-verify gate skips it — the sparse sample's class set is
+        // structurally unrepresentative, the same reason the
+        // continuity classes are waived there; the dry-run surface's
+        // pre-sample check enforces the full-clip contract before the
+        // sample). The first offender = the first frame (the sorted
+        // frame order) whose class is outside the allowed pair;
+        // the shape-only refusal (the lone fp-camera set) names the
+        // clip's first frame.
+        if !subset {
+            let class_set: std::collections::BTreeSet<crate::frameclass::FrameClass> = gs
+                .iter()
+                .filter(|g| crate::frameclass::in_contract_domain(&g.structure))
+                .map(|g| g.class)
+                .collect();
+            if !class_set.is_empty() && !crate::frameclass::allowed_clip_class_set(&class_set) {
+                let offender = ordered
+                    .iter()
+                    .find(|g| !matches!(
+                        g.class,
+                        crate::frameclass::FrameClass::RawUncompressed
+                            | crate::frameclass::FrameClass::FpCameraLossless
+                    ))
+                    .map(|g| g.file.clone())
+                    .or_else(|| ordered.first().map(|g| g.file.clone()))
+                    .unwrap_or_else(|| String::from("-"));
+                v.failures
+                    .push(crate::frameclass::clip_class_contract_line(&class_set, &offender));
+            }
+        }
+        // The per-clip class census (the additive report field — the
+        // manifest + the clip report's census line render from it;
+        // the class names in alphabetical order — deterministic).
+        let census: std::collections::BTreeMap<String, u64> = {
+            let mut m: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
+                std::collections::BTreeMap::new();
+            for g in &gs {
+                *m.entry(g.class).or_default() += 1;
+            }
+            m.into_iter()
+                .map(|(c, n)| (c.name().to_string(), n))
+                .collect()
+        };
+        class_census.push((clip.clone(), census));
         // (a) frame-number contiguity: duplicates + gaps.
         let mut prev: Option<&GateFrame> = None;
         for g in &ordered {
@@ -356,6 +444,7 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
         },
         global_failures,
         reel,
+        class_census,
     }
 }
 
@@ -415,6 +504,29 @@ pub fn write_ingest_manifest(
     };
     tsv.push_str(&reel_line);
     tsv.push('\n');
+    // The per-clip class lines (the mixed-compression contract — the
+    // additive header convention: the `clip_class` key is unknown to
+    // the audit re-derivation, which skips it — the format stays
+    // additive + versioned; one line per clip, the clips order,
+    // the census rendered from the gate's additive field — never
+    // re-derived here): `clip_class: {clip} = {class-set display}
+    // ({n} frame(s): {per-class counts})`.
+    for (key, census) in &gate.class_census {
+        let set_display: String = {
+            let names: Vec<String> = census.keys().cloned().collect();
+            format!("{{{}}}", names.join(", "))
+        };
+        let counts: Vec<String> = census
+            .iter()
+            .map(|(c, n)| format!("{c} {n}"))
+            .collect();
+        let n: u64 = census.values().sum();
+        tsv.push_str(&format!(
+            "clip_class: {} = {set_display} ({n} frame(s): {})\n",
+            crate::worker::display_clip(key),
+            counts.join(", ")
+        ));
+    }
     for c in &gate.clips {
         tsv.push_str(&format!(
             "{}\t{}\t{}\t{}\t{}\t{}\n",
@@ -1150,6 +1262,193 @@ mod tests {
             vec![tmp.join("A001_20260101_000001.DNG")],
             "real frame + shadow → 1 (the reals only): {frames:?}"
         );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The minimal synthetic LE DNG with a CLASS structure + a
+    /// TimeCodes tag (the clip-contract test's inputs): IFD0 =
+    /// 256/257 (SHORT 3856/2170) + 258 (SHORT 12) + 259 (SHORT
+    /// `compression`) + optionally 322/323 (SHORT) + 324 (LONG cnt =
+    /// `tiles` — the out-of-line region allocated, the parser's bounds
+    /// discipline) + 51043 (BYTE cnt 8 — the out-of-line BCD TC).
+    /// No pixel data (the gate + the class scan never read pixels).
+    fn synth_class_frame(
+        path: &std::path::Path,
+        compression: u16,
+        tile: Option<(u16, u16, u32)>,
+        tc: (u8, u8, u8, u8), // (ff, ss, mm, hh) — the BCD layout
+    ) {
+        struct E {
+            tag: u16,
+            typ: u16,
+            cnt: u32,
+            val: u32,
+            out: Vec<u8>,
+        }
+        let mut es: Vec<E> = vec![
+            E { tag: 256, typ: 3, cnt: 1, val: 3856, out: vec![] },
+            E { tag: 257, typ: 3, cnt: 1, val: 2170, out: vec![] },
+            E { tag: 258, typ: 3, cnt: 1, val: 12, out: vec![] },
+            E { tag: 259, typ: 3, cnt: 1, val: compression as u32, out: vec![] },
+        ];
+        if let Some((tw, th, tiles)) = tile {
+            es.push(E { tag: 322, typ: 3, cnt: 1, val: tw as u32, out: vec![] });
+            es.push(E { tag: 323, typ: 3, cnt: 1, val: th as u32, out: vec![] });
+            es.push(E { tag: 324, typ: 4, cnt: tiles, val: 0, out: vec![0u8; (4 * tiles as u32) as usize] });
+        }
+        let (ff, ss, mm, hh) = tc;
+        es.push(E {
+            tag: 51043,
+            typ: 1,
+            cnt: 8,
+            val: 0,
+            out: vec![bcd16(ff), bcd16(ss), bcd16(mm), bcd16(hh), 0, 0, 0, 0],
+        });
+        let ifd_off = 8u32;
+        let ifd_size = 2 + es.len() as u32 * 12 + 4;
+        let mut area = ifd_off + ifd_size;
+        let mut ptrs = vec![0u32; es.len()];
+        for (i, e) in es.iter().enumerate() {
+            if !e.out.is_empty() {
+                ptrs[i] = area;
+                area += e.out.len() as u32;
+            }
+        }
+        let total = area as usize;
+        let mut b = vec![0u8; total];
+        b[0..4].copy_from_slice(b"II*\0");
+        b[4..8].copy_from_slice(&ifd_off.to_le_bytes());
+        b[8..10].copy_from_slice(&(es.len() as u16).to_le_bytes());
+        for (i, e) in es.iter().enumerate() {
+            let o = 10 + i * 12;
+            b[o..o + 2].copy_from_slice(&e.tag.to_le_bytes());
+            b[o + 2..o + 4].copy_from_slice(&e.typ.to_le_bytes());
+            b[o + 4..o + 8].copy_from_slice(&e.cnt.to_le_bytes());
+            if e.out.is_empty() {
+                b[o + 8..o + 12].copy_from_slice(&e.val.to_le_bytes());
+            } else {
+                b[o + 8..o + 12].copy_from_slice(&ptrs[i].to_le_bytes());
+            }
+        }
+        // next-IFD = 0 (already zeroed) + the out-of-line payloads.
+        for (i, e) in es.iter().enumerate() {
+            if !e.out.is_empty() {
+                b[ptrs[i] as usize..ptrs[i] as usize + e.out.len()].copy_from_slice(&e.out);
+            }
+        }
+        std::fs::write(path, b).unwrap();
+    }
+
+    /// R7 test 4 — the ingest contract path on the class sets (the
+    /// 0-frames-touched pre-job mechanics — the refusal BEFORE any
+    /// frame processing; the gate never writes):
+    /// `{Raw}` accepted (the existing behavior) · `{Raw, FpCamera}`
+    /// accepted (the new mixed set) · `{Raw, FramePrismArchive}` → the
+    /// R5 clip-contract refusal (the pinned wording, byte-for-byte) ·
+    /// `{Raw, Unknown}` → the R5 clip-contract refusal.
+    #[test]
+    fn clip_contract_mixed_set_accepted_others_refused() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let tmp = std::env::temp_dir().join(format!("frameprism-clip-contract-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        // (a) {Raw} accepted (the existing behavior — the raw clip's
+        // gate stays clean).
+        let a = tmp.join("a");
+        std::fs::create_dir_all(&a).unwrap();
+        synth_class_frame(&a.join("A_20260101_000001.DNG"), 1, None, (0, 0, 0, 0));
+        let frames_a = collect_dng_frames(&a).unwrap();
+        let gate_a = ingest_gate(&a, &frames_a);
+        assert!(
+            gate_a.is_pass(),
+            "the raw clip is the existing behavior (the contract set {{raw-uncompressed}} is allowed): {:?}",
+            gate_a.failures()
+        );
+
+        // (b) {Raw, FpCamera} accepted (the new mixed contract —
+        // A001_013's shape): the gate passes + the census is the
+        // per-class count (the additive report field).
+        let b = tmp.join("b");
+        std::fs::create_dir_all(&b).unwrap();
+        synth_class_frame(&b.join("B_20260101_000001.DNG"), 1, None, (0, 0, 0, 0));
+        synth_class_frame(&b.join("B_20260101_000002.DNG"), 7, Some((512, 368, 48)), (1, 0, 0, 0));
+        let frames_b = collect_dng_frames(&b).unwrap();
+        let gate_b = ingest_gate(&b, &frames_b);
+        assert!(
+            gate_b.is_pass(),
+            "the mixed {{raw, fp-camera}} set is the allowed contract: {:?}",
+            gate_b.failures()
+        );
+        let census_b = &gate_b.class_census;
+        assert_eq!(census_b.len(), 1, "the single clip's census: {census_b:?}");
+        assert_eq!(census_b[0].0, "", "the flat clip's key is the empty string");
+        assert_eq!(
+            census_b[0].1.get("fp-camera-lossless").copied(),
+            Some(1),
+            "the fp-camera frame's census count: {:?}",
+            census_b[0].1
+        );
+        assert_eq!(
+            census_b[0].1.get("raw-uncompressed").copied(),
+            Some(1),
+            "the raw frame's census count: {:?}",
+            census_b[0].1
+        );
+
+        // (c) {Raw, FramePrismArchive} → the R5 clip-contract refusal
+        // (the pinned wording byte-for-byte — the first offender =
+        // the archive frame; the refusal is the gate's — the
+        // pre-job mechanism, nothing processed).
+        let c = tmp.join("c");
+        std::fs::create_dir_all(&c).unwrap();
+        synth_class_frame(&c.join("C_20260101_000001.DNG"), 1, None, (0, 0, 0, 0));
+        // The archive class: 482×272 grid, 64 tiles (the expected
+        // tiling on 3856×2170), the gate contract's measured grid.
+        synth_class_frame(&c.join("C_20260101_000002.DNG"), 7, Some((482, 272, 64)), (1, 0, 0, 0));
+        let frames_c = collect_dng_frames(&c).unwrap();
+        let gate_c = ingest_gate(&c, &frames_c);
+        assert!(!gate_c.is_pass(), "the {{raw, frameprism-archive}} set is refused pre-job");
+        let pinned_c =
+            "clip class contract violated: {raw-uncompressed, frameprism-archive} (allowed: the raw class; the mixed {raw, fp-camera} set) — first offender C_20260101_000002.DNG";
+        assert!(
+            gate_c.failures() == vec![pinned_c.to_string()],
+            "the pinned R5 wording, byte-for-byte (the single named failure): {:?}",
+            gate_c.failures()
+        );
+
+        // (d) {Raw, Unknown} → the R5 clip-contract refusal (the
+        // unknown tiled grid — 300×300 × 1 tile, not the fp-camera
+        // fingerprint, not a measured archive grid).
+        let d = tmp.join("d");
+        std::fs::create_dir_all(&d).unwrap();
+        synth_class_frame(&d.join("D_20260101_000001.DNG"), 1, None, (0, 0, 0, 0));
+        synth_class_frame(&d.join("D_20260101_000002.DNG"), 7, Some((300, 300, 1)), (1, 0, 0, 0));
+        let frames_d = collect_dng_frames(&d).unwrap();
+        let gate_d = ingest_gate(&d, &frames_d);
+        assert!(!gate_d.is_pass(), "the {{raw, unknown}} set is refused pre-job");
+        let pinned_d =
+            "clip class contract violated: {raw-uncompressed, unknown} (allowed: the raw class; the mixed {raw, fp-camera} set) — first offender D_20260101_000002.DNG";
+        assert!(
+            gate_d.failures() == vec![pinned_d.to_string()],
+            "the pinned R5 wording, byte-for-byte (the single named failure): {:?}",
+            gate_d.failures()
+        );
+
+        // The R5 pinned wordings' byte forms (the tests assert them
+        // verbatim — the × and the em-dash are part of the contract):
+        // the frame-level refusals the clip-contract's sibling rows
+        // name (the archive-as-encode-input + the fp-camera × mode
+        // rows — the dry-run sample dispatch + the encode dispatch
+        // fire them).
+        assert_eq!(
+            crate::frameclass::frameprism_archive_line("f.DNG"),
+            "FramePrism archive frame as encode input: the decode/verify verbs only — frame f.DNG"
+        );
+        assert_eq!(
+            crate::frameclass::fp_camera_mode_line("log10", "f.DNG"),
+            "fp-camera lossless frame × mode log10: the mixed-mode rows are unmeasured (the v1 row is the lossless carry) — frame f.DNG"
+        );
+
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

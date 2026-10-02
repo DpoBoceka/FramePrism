@@ -643,13 +643,28 @@ size (the ratio is against what the camera wrote).
 
 ### `--fast`
 
-Skip the 3-candidate per-tile trial encode and always use the reference
+Skip the 3-candidate per-tile trial encode and always use the
+reference
 product's
 Wrapped PSV 7 (the fixed-candidate choice for both
 precisions, per the per-tile probe;
 price vs adaptive selection +1.4% (dark) to +4.3%
-(bright) tile bytes — bit-exact lossless, verify unaffected). Composes
+(bright) tile bytes — bit-exact lossless, verify unaffected). On the
+482 grid this is the default since the Stage-1 selection-default flip
+—the flag is accepted for compatibility (its output matches the
+default); on the other grids it keeps the single-candidate per-gate
+family head, unchanged. Composes
 with `--downscale2x` and the FRAMEPRISM_ENGINE=native engine seam.
+
+### `--trial`
+
+The base default's 3-candidate size-min trial selection on the 482
+grid (the pre-Stage-1 default, byte-frozen — the
+pre-Stage-1 byte-parity contract at the measured 2.67×
+workload factor, the Stage-1 flip's named give-up): the 3
+candidates per tile, the smallest stream wins. On the
+other grids: accepted-but-inert (the shipped selection is
+unaffected). Mutually exclusive with `--fast` (the named rc=2).
 
 ### `--resume`
 

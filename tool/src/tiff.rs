@@ -160,7 +160,12 @@ pub struct IfdEntry {
 /// file offset.
 #[derive(Clone, Debug)]
 pub struct IfdTable {
-    /// File offset of the 16-bit entry-count word.
+    /// File offset of the 16-bit entry-count word. For the fp-camera
+    /// frames this IS the tile-blob-ends-at datum: the fp
+    /// frame's IFD occupies the file tail, so the tile blob must end
+    /// EXACTLY at this offset (the R2 class-keyed container check reads
+    /// `meta.ifd0.off` — no separate `Meta.ifd0_offset` field, the
+    /// seam note).
     pub off: u64,
     /// Byte range of the IFD structure (count + entries + next pointer).
     pub struct_range: Range<u64>,
