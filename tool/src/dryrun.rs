@@ -218,12 +218,12 @@ pub fn eta_ms(ms: &[f64], n: u64) -> (Option<f64>, Option<f64>) {
 }
 
 // =====================================================================
-// The per-population encoded projection (the R0 ruling —
-// R3, the both-estimates machinery): the same two projection forms
+// The per-population encoded projection (the R3
+// both-estimates machinery): the same two projection forms
 // (the total_source/ratio_q fallback + the per-frame-then-sum) at the
 // band's quantiles, over a CHOSEN population — the raw frames only
 // (the `--carry` scenario: the fp frames ride the carried line) or
-// the FULL population (the transcoded ruling: the fp frames at the
+// the FULL population (the transcoded default: the fp frames at the
 // measured band). The measured frames inside the population ride at
 // their measured encoded bytes; the unmeasured ones at src_i/ratio_q.
 // Raw-only input: the two populations coincide — the pre-contract
@@ -289,7 +289,7 @@ pub struct Opts {
     /// — the per-frame wall is jobs-independent, the frame encode is
     /// single-threaded; the line is printed).
     pub jobs: usize,
-    /// The CLI `--carry` opt-in (the R0 ruling — the
+    /// The CLI `--carry` opt-in (the
     /// fp-camera frames' byte-exact source copy instead of the
     /// transcode default): the sample dispatch + the both-estimates
     /// logic both key on it (the dry run's explicit seam — the
@@ -300,7 +300,7 @@ pub struct Opts {
     pub verify_flag: bool,
 }
 
-/// The mixed clip's BOTH estimates (the R0 ruling — R3):
+/// The mixed clip's BOTH estimates (R3):
 /// the two archive plans the user can run — `--carry` (the explicit
 /// opt-in: the raw frames encoded + the fp frames the byte-exact
 /// source copy) and the transcode (the default: every frame at the
@@ -475,7 +475,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
     let mut census_lines: Vec<String> = Vec::new();
     for (clip, idxs) in &by_clip {
         let census = &clip_census[clip];
-        // The contract's DOMAIN (the PM ruling — the amended R1/R2):
+        // The contract's DOMAIN (the amended R1/R2):
         // the set = the classes of the frames WITH a readable
         // compression structure; a parse-failed frame (e.g. the
         // strict parse's `MissingTag(259)`) does not enter the set —
@@ -681,9 +681,9 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         let (cls, structure) = class_scans[idx as usize];
         //: the policy table's sample dispatch (the mixed-compression
         // contract — the dry-run mirror of the encode-side table, ONE
-        // function, the R0 ruling row): the raw class = the
+        // function, the policy row): the raw class = the
         // existing measured sample encode (unchanged); the fp-camera
-        // class on the lossless row = the RULING cell — Transcode by
+        // class on the lossless row = the policy cell — Transcode by
         // default (the sample encode through the transcode seam — the
         // decode + the re-encode through the archive path, verify
         // always on: the archive drill + the fidelity check ride in
@@ -697,13 +697,13 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         // prints, the named refusal, rc=1). The chooser's None = the
         // parse-failure class (no readable compression — the strict
         // parse's own named line, the `MissingTag(259)` — byte-
-        // invariant, the ruling's domain clause): it routes through
+        // invariant, the domain clause): it routes through
         // the existing sample encode, which fires it.
         match crate::worker::encode::policy(cls, o.mode, o.downscale, o.carry) {
             crate::worker::encode::FramePolicy::Encode
             | crate::worker::encode::FramePolicy::Transcode => {
                 // The encode treatment: the raw class (unchanged) or
-                // the fp-camera class's transcode (the ruling default
+                // the fp-camera class's transcode (the transcode default
                 // — the measurement IS the transcode: the decode +
                 // the re-encode through the existing archive path).
             }
@@ -842,11 +842,11 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
     let bd = if m > 0 { Some(band(&ratios)) } else { None };
 
     if let (Some(b), Some(free_b)) = (&bd, Some(free)) {
-        //: the encoded estimate's population (the R0 ruling
-        // — the both-estimates contract): the CARRIED scenario
+        //: the encoded estimate's population (the
+        // both-estimates contract): the CARRIED scenario
         // (`--carry` — the raw frames at the measured band; the fp
         // frames ride the carried line at the exact source bytes) +
-        // the TRANSCODED scenario (the ruling default — the FULL
+        // the TRANSCODED scenario (the transcode default — the FULL
         // population at the measured band: the fp frames re-encoded
         // through the archive path). Raw-only input: the two
         // populations coincide (carried_bytes = 0) — the pre-
@@ -915,7 +915,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
         };
         let mixed = carried_bytes > 0;
         // The PRIMARY scenario's lines (the estimate's home — the
-        // ruling default under the default flags, the carried plan
+        // transcode default under the default flags, the carried plan
         // under `--carry`): raw-only input is primary-raw either
         // way (the populations coincide) — the pre-contract lines
         // verbatim (byte-frozen).
@@ -938,14 +938,14 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
                 );
             } else {
                 println!(
-                    "estimate: transcoded (the fp-camera lossless frames — the ruling default: the decode + the re-encode through the archive path) — {carried_n} frame(s) — {carried_bytes} B source (the fp frames ride the measured band; the output is in the archive contract — the transcode-fidelity check: decode(output) == the decoded input plane, pixel-exact)"
+                    "estimate: transcoded (the fp-camera lossless frames — the transcode default: the decode + the re-encode through the archive path) — {carried_n} frame(s) — {carried_bytes} B source (the fp frames ride the measured band; the output is in the archive contract — the transcode-fidelity check: decode(output) == the decoded input plane, pixel-exact)"
                 );
             }
             // The BOTH estimates (R3 — the dry run reports the
             // carried vs the transcoded plan: size + ETA, both
             // named; the fit-check = the worst of the two).
             println!(
-                "estimate: both estimates (the mixed clip — carried vs transcoded: size + ETA) — carried (--carry): {raw_worst} B worst / {raw_likely} B likely / {raw_best} B best encoded + {carried_bytes} B carried (exact) = {carried_plan_worst} B worst; ETA encode+verify {} (p50) / {} (p95) (the raw frames' encode — the fp byte copy is an unmeasured path, honestly named) — transcoded (the ruling default): {transcoded_plan_worst} B worst / {all_likely} B likely / {all_best} B best; ETA encode+verify {} (p50) / {} (p95); the fit-check = the worst of the two plans (both named)",
+                "estimate: both estimates (the mixed clip — carried vs transcoded: size + ETA) — carried (--carry): {raw_worst} B worst / {raw_likely} B likely / {raw_best} B best encoded + {carried_bytes} B carried (exact) = {carried_plan_worst} B worst; ETA encode+verify {} (p50) / {} (p95) (the raw frames' encode — the fp byte copy is an unmeasured path, honestly named) — transcoded (the transcode default): {transcoded_plan_worst} B worst / {all_likely} B likely / {all_best} B best; ETA encode+verify {} (p50) / {} (p95); the fit-check = the worst of the two plans (both named)",
                 crate::live::fmt_mss(c50),
                 crate::live::fmt_mss(c95),
                 crate::live::fmt_mss(t50),
@@ -960,7 +960,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
             pop_note = if !mixed || o.carry {
                 "the raw frames' population — the carried frames ride the carried line"
             } else {
-                "the full population — the fp frames at the measured band (the ruling default)"
+                "the full population — the fp frames at the measured band (the transcode default)"
             },
         );
         println!(
@@ -971,7 +971,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
             "estimate: {} fit — {}: free {free_b} B vs worst case {worst_combined} B (the measured p10-ratio bound over the raw frames{fit_note} — no fixed corpus rate)",
             o.dest.display(),
             if fits { "FITS" } else { "DOES NOT FIT" },
-            fit_note = if !mixed { "" } else if o.carry { " + the carried bytes (exact)" } else { " (the fit-check = the worse of the two plans — the carried scenario and the transcoded ruling)" },
+            fit_note = if !mixed { "" } else if o.carry { " + the carried bytes (exact)" } else { " (the fit-check = the worse of the two plans — the carried scenario and the transcode default)" },
         );
         let (e50, e95) = eta_ms(
             &measured.iter().map(|x| x.ms).collect::<Vec<_>>(),
@@ -1008,7 +1008,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
                 &census_lines,
                 // The both estimates: the MIXED input only (the raw-
                 // only record stays the pre-contract shape — the plans
-                // coincide, no both-estimates line; the byte-freeze).
+                // coincide, no both-estimates line; byte-identity).
                 mixed.then_some(&both),
             );
         }
@@ -1054,7 +1054,7 @@ pub fn estimate(input: &Path, o: &Opts) -> (Verdict, u8) {
                     })
                     .count();
                 println!(
-                    "DRY RUN PASS — {m} of {n} sampled ({raw_m} raw encoded + {} fp transcoded — the ruling default), verify {m}/{m} bit-exact, encoded range {}–{} B (p50 {} B), fits {}",
+                    "DRY RUN PASS — {m} of {n} sampled ({raw_m} raw encoded + {} fp transcoded — the transcode default), verify {m}/{m} bit-exact, encoded range {}–{} B (p50 {} B), fits {}",
                     m - raw_m,
                     all_best,
                     all_worst,
@@ -1233,7 +1233,7 @@ fn write_report(
     // the temporal-verified term amended in for the record when
     // any; n = 0 = the verbatim stdout line, byte-frozen).
     census_lines: &[String],
-    // The both estimates (the R0 ruling — R3): the mixed
+    // The both estimates (R3): the mixed
     // clip's carried vs transcoded plans (size + ETA); None on the
     // raw-only input (the plans coincide — the pre-contract shape) +
     // the no-measured-band paths (the conservative bound / the named
@@ -1309,7 +1309,7 @@ fn write_report(
                 l_total = total_form.1,
                 b_total = total_form.2,
                 pop_note = if carried_bytes > 0 && !o.carry {
-                    "the full population — the fp frames at the measured band (the ruling default)"
+                    "the full population — the fp frames at the measured band (the transcode default)"
                 } else {
                     "the raw frames' population — the carried frames ride the carried line"
                 },
@@ -1321,7 +1321,7 @@ fn write_report(
                     ));
                 } else {
                     md.push_str(&format!(
-                        "projected transcoded (the fp-camera lossless frames — the ruling default: the decode + the re-encode through the archive path): {carried_n} frame(s) — {carried_bytes} B source (the fp frames ride the measured band; the output is in the archive contract)\n\n"
+                        "projected transcoded (the fp-camera lossless frames — the transcode default: the decode + the re-encode through the archive path): {carried_n} frame(s) — {carried_bytes} B source (the fp frames ride the measured band; the output is in the archive contract)\n\n"
                     ));
                 }
             }
@@ -1334,7 +1334,7 @@ fn write_report(
                     let tl = both.transcoded_likely;
                     let tb = both.transcoded_best;
                     md.push_str(&format!(
-                        "both estimates (the mixed clip — carried vs transcoded: size): carried (--carry) {cw} B worst / {cl} B likely / {cb} B best encoded + {carried_bytes} B carried (exact) = {} B worst vs transcoded (the ruling default) {tw} B worst / {tl} B likely / {tb} B best; the fit-check = the worst of the two plans (both named — the ETAs ride the non-pinned section)\n\n",
+                        "both estimates (the mixed clip — carried vs transcoded: size): carried (--carry) {cw} B worst / {cl} B likely / {cb} B best encoded + {carried_bytes} B carried (exact) = {} B worst vs transcoded (the transcode default) {tw} B worst / {tl} B likely / {tb} B best; the fit-check = the worst of the two plans (both named — the ETAs ride the non-pinned section)\n\n",
                         cw.saturating_add(carried_bytes)
                     ));
                 } else {
@@ -1345,7 +1345,7 @@ fn write_report(
                     let tl = both.transcoded_likely;
                     let tb = both.transcoded_best;
                     md.push_str(&format!(
-                        "both estimates (the mixed clip — carried vs transcoded: size): transcoded (the ruling default) {tw} B worst / {tl} B likely / {tb} B best vs carried (--carry) {cw} B worst / {cl} B likely / {cb} B best encoded + {carried_bytes} B carried (exact) = {} B worst; the fit-check = the worst of the two plans (both named — the ETAs ride the non-pinned section)\n\n",
+                        "both estimates (the mixed clip — carried vs transcoded: size): transcoded (the transcode default) {tw} B worst / {tl} B likely / {tb} B best vs carried (--carry) {cw} B worst / {cl} B likely / {cb} B best encoded + {carried_bytes} B carried (exact) = {} B worst; the fit-check = the worst of the two plans (both named — the ETAs ride the non-pinned section)\n\n",
                         cw.saturating_add(carried_bytes)
                     ));
                 }
@@ -1369,7 +1369,7 @@ fn write_report(
                 } else if o.carry {
                     " + the carried bytes (exact)"
                 } else {
-                    " (the fit-check = the worse of the two plans — the carried scenario and the transcoded ruling)"
+                    " (the fit-check = the worse of the two plans — the carried scenario and the transcode default)"
                 },
             ));
         }
@@ -1401,7 +1401,7 @@ fn write_report(
         // copy is an unmeasured path, honestly named).
         if let Some(both) = both {
             md.push_str(&format!(
-                "both estimates — ETA encode+verify: carried (--carry) {} (p50) / {} (p95) (the raw frames' encode — the fp byte copy is an unmeasured path) vs transcoded (the ruling default) {} (p50) / {} (p95)\n\n",
+                "both estimates — ETA encode+verify: carried (--carry) {} (p50) / {} (p95) (the raw frames' encode — the fp byte copy is an unmeasured path) vs transcoded (the transcode default) {} (p50) / {} (p95)\n\n",
                 crate::live::fmt_mss(both.carried_eta.0),
                 crate::live::fmt_mss(both.carried_eta.1),
                 crate::live::fmt_mss(both.transcoded_eta.0),
@@ -1729,11 +1729,11 @@ mod tests {
         // the CWD/probe candidates otherwise; the override is the
         // process-global slot, the Once idempotent).
         crate::worker::testutil::camera_profile_override();
-        // The R0 ruling moved this test's behavior: the
+        // The transcode default moved this test's behavior: the
         // fp × lossless cell is now the TRANSCODE default; the
         // assertions below describe the `--carry` opt-in (the carry
         // contract, kept verbatim) — the flag is set explicitly
-        // (the ruling-moved rewire; every assertion unchanged).
+        // (the default-moved rewire; every assertion unchanged).
         let opts = Opts {
             dest: dest.clone(),
             k_override: None, // the clamp rule: N=3 → K=N (the full-clip measurement — all 3 frames sampled)
@@ -1748,7 +1748,7 @@ mod tests {
             downscale: false,
             fast: false,
             jobs: 2,
-            carry: true, // the ruling-moved rewire (R0): the carried scenario
+            carry: true, // the default-moved rewire (R0): the carried scenario
             verify_flag: false,
         };
         let t0 = std::time::Instant::now();

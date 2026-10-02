@@ -124,7 +124,7 @@ pub fn process_dir(
     qc_gate: bool,
 ) -> Result<Report> {
     //: the profiler gate (the `FRAMEPRISM_PROFILE` env,
-    // read ONCE at the run entry — the CARRY_FLAG house pattern's
+    // read ONCE at the run entry — the CARRY_FLAG pattern's
     // run-entry form; absent / other = INACTIVE — the default run is
     // the byte-frozen no-op):
     crate::profile::init_from_env();
@@ -255,8 +255,8 @@ pub fn process_dir(
                 }
             };
             // The identity buffer + the parsed IFD (the bounded prefix
-            // pair). The named FENCE EXCEPTION (the 2026-09-30
-            // ruling): the fp camera's frames place the IFD at the FILE
+            // pair). The named FENCE EXCEPTION: the fp camera's frames
+            // place the IFD at the FILE
             // TAIL (the measured ~4.4 MB offset), beyond the 1 MiB
             // detection prefix — the parse fails with the OUT-OF-WINDOW
             // class only (`ParseError::BadIfdOffset` — the beyond-buffer
@@ -266,9 +266,9 @@ pub fn process_dir(
             // below, never retried). The retry = the full-file read +
             // this named note line (the checksums full-read note
             // vocabulary: `note: {path} — {reason}; reading the full
-            // file`), then the identity on the full buffer. Byte-freeze
+            // file`), then the identity on the full buffer. Byte-identity
             // note: a raw frame parses within the prefix — this
-            // fallback never fires on them (the R8 A/B control's
+            // fallback never fires on them (the two-binary control's
             // byte-equality covers the raw path).
             let (meta, id_buf) = match crate::tiff::read_meta(&buf) {
                 Ok(m) => (m, std::borrow::Cow::Borrowed(buf.as_slice())),
@@ -706,7 +706,7 @@ pub fn process_dir(
         // never leaks into the next frame's measurement on this
         // thread). For every non-fp frame: the no-ctx default (the
         // strict drill stands — the byte-frozen path). The slot is
-        // THREAD-LOCAL (the PM gate ruling, 2026-10-01 — the
+        // THREAD-LOCAL (the slot contract — the
         // process-wide static raced the sibling frames' set/clear on
         // the rayon worker threads under the DEFAULT jobs; the
         // thread-local scopes the set/clear to this closure's thread

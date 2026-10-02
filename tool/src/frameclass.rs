@@ -13,18 +13,18 @@
 //!   byte-invariant);
 //! - `FpCameraLossless` — compression 7 + the fp camera's lossless
 //!   engine tile structure (the measured fingerprint: 512×368 tiles,
-//!   48 tiles, on 3856×2170 — the 2026-09-30 probe facts,
-//!   `knowledge/fpsup-mixed-compression.md` addendum; the v1 carry
+//!   48 tiles, on 3856×2170 — the probe facts, the
+//!   design-record addendum; the v1 carry
 //!   class);
 //! - `FramePrismArchive` — compression 7 + a grid in the tool's
 //!   MEASURED archive grid set (the gate contract's data —
 //!   `tileenc::gate_tile_dims_depth` + the expected tile count for the
 //!   frame's own geometry; the grid set is DATA read through the gate
-//!   contract, NOT a hardcoded list in this module — the house
+//!   contract, NOT a hardcoded list in this module — the
 //!   no-hardcoded-geometry rule; the decode/verify-verb class);
 //! - `Unknown` — any other structure: the named-refusal class.
 //!
-//! **The classifier's domain (the PM RULING, 2026-09-30 — the amended
+//! **The classifier's domain (the amended
 //! R1/R2):** the classifier is a function over SUCCESSFULLY-PARSED
 //! structures. `Unknown` = a READABLE structure that cannot be placed
 //! in a measured class. A frame whose tiff parse FAILS (including the
@@ -38,7 +38,7 @@
 //! (`in_contract_domain`); a parse-failed frame does not enter the
 //! set. The pre-job refusal keeps its full value: a clip carrying a
 //! READABLE archive / unknown-grid frame is still refused pre-job.
-//! Rationale (the PM): conflating the parse-failure class with the
+//! Rationale: conflating the parse-failure class with the
 //! named-refusal class would force the out-of-fence fixture-builder
 //! edits (the worker/audit testutil builders carry NO tag 259 — the
 //! `{Unknown}` clip refusal would break their gate.is_pass() tests)
@@ -93,7 +93,7 @@ pub enum FrameAction {
     Encoded,
     /// The byte-exact source copy (the verify = the source-sha match).
     Carried,
-    /// The transcode (the R0 ruling — the fp-camera class's
+    /// The transcode (the fp-camera class's
     /// lossless cell, the default): the fp frame is decoded through the
     /// the fp-camera lossless decode path + re-encoded through the existing archive path.
     /// The D4 vocabulary's `transcoded:fp-hardware` — the class is the
@@ -144,7 +144,7 @@ pub struct FrameStructure {
 }
 
 /// The fp camera's lossless-engine fingerprint (the measured facts —
-/// the 2026-09-30 probe: 512×368 tiles, 48 tiles, on 3856×2170; the
+/// the probe: 512×368 tiles, 48 tiles, on 3856×2170; the
 /// R5 wording names the fingerprint verbatim).
 const FP_TILE_W: u32 = 512;
 const FP_TILE_H: u32 = 368;
@@ -252,8 +252,8 @@ fn archive_grid_match(s: &FrameStructure) -> bool {
 ///   named refusal, not the arm: the same grid at bps 8 is NOT the
 ///   fp-camera class — `Unknown` + the unknown-row wording, never a
 ///   misclassification into the 12-bit arm; the 8-bit decode arm is
-///   deferred to a corpus lane — the design record's benefit-map row
-///   stands as the future work, named in the lane report) →
+///   deferred to a corpus run — the design record's benefit-map row
+///   stands as the future work, named in the measurement record) →
 ///   `FpCameraLossless`; a grid in the tool's measured archive grid set
 ///   → `FramePrismArchive`; any other tiled grid → `Unknown`;
 /// - any other readable compression value (incl. a non-tiled 7 — the
@@ -263,7 +263,7 @@ fn archive_grid_match(s: &FrameStructure) -> bool {
 ///   the readable-but-unplaceable structure; the clip-class contract's
 ///   DOMAIN predicate (`in_contract_domain`) keeps it OUT of the
 ///   contract's set (the parse-failure class — the encode site's
-///   existing named refusal, the ruling's domain clause).
+///   existing named refusal, the domain clause).
 pub fn classify_structure(s: &FrameStructure) -> FrameClass {
     match s.compression {
         Some(1) if !s.tiled => FrameClass::RawUncompressed,
@@ -351,7 +351,7 @@ pub fn class_set_display(set: &BTreeSet<FrameClass>) -> String {
     format!("{{{}}}", names.join(", "))
 }
 
-/// The clip class contract's DOMAIN predicate (the PM RULING — the
+/// The clip class contract's DOMAIN predicate (the
 /// amended R1/R2): a frame enters the contract's set IFF its structure
 /// carries a readable compression value (tag 259 as an in-line
 /// count-1 SHORT/LONG). A frame whose compression is absent /
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn frameclass_fp_camera_grid_is_fp_camera_lossless() {
         // Compression 7, 322/323 = 512×368, 48 tiles, 256/257 =
-        // 3856×2170 (the LONG types the fp frames carry — the M0
+        // 3856×2170 (the LONG types the fp frames carry — the
         // measured tag dump) → the fp-camera fingerprint.
         let meta = synth_ifd(
             Endian::Little,

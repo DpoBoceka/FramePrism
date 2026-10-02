@@ -126,8 +126,8 @@ extern "C" {
 #[cfg(test)]
 mod tests {
     //! The fp-structure conformance KAT — the durable,
-    //! committed, camera-free form of the 2026-09-30 conformance probe
-    //! (the scratch probe + its renders live in the lane
+    //! committed, camera-free form of the conformance probe
+    //! (the scratch probe + its renders live in the
     //! evidence dir, never committed). The settled conformance facts:
     //!
     //! - the fp tag-7 tiles are 2-component lossless SOF3: even/odd
@@ -140,11 +140,11 @@ mod tests {
     //!   streams that the decoder must CLIP;
     //! - the grid is 8×6 = 48 tiles (TIFF tags 324/325, ascending).
     //!
-    //! Test-only by contract (the byte-freeze lane): no
+    //! Test-only by contract (the byte-identity contract): no
     //! product surface, no new crate, no flag, no testdata / oracle
     //! change. The corpus-conditional test RUNs when the mirrored frame
     //! is present in the worktree and SKIPs on a fresh checkout (the
-    //! house `real_a001_strip_golden` pattern) — the suite pin holds
+    //! `real_a001_strip_golden` pattern) — the suite pin holds
     //! either way.
 
     use core::ffi::CStr;
@@ -160,9 +160,9 @@ mod tests {
     const FP_FRAME_H: u32 = 2170;
     const FP_TILES: usize = 48; // 8 cols × 6 rows
 
-    /// The R1.3 canary pins — the M0 measurement (2026-09-30) on the
+    /// The canary pins — the measurement on the
     /// mirrored corpus frame f000001, through the product engine (the
-    /// house canary pattern: exact min/max, windowed mean / CFA class
+    /// in-repo canary pattern: exact min/max, windowed mean / CFA class
     /// means ±1). The probe's values are the cross-check and agree
     /// within the 1-code CFA tolerance: CFA 627/789/789/502 (measured
     /// 627.0194/788.8449/789.4640/501.6324), the isotropy ratio
@@ -187,7 +187,7 @@ mod tests {
         unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
     }
 
-    /// A deterministic full-range 12-bit `w`×`h` plane (the house
+    /// A deterministic full-range 12-bit `w`×`h` plane (the in-repo
     /// `test_plane` construction: gradient + per-pixel jitter — no
     /// floats, no PRNG; spans 0..=4095).
     fn fp_test_plane(w: usize, h: usize) -> Vec<u16> {
@@ -522,7 +522,7 @@ mod tests {
                 }
             }
         }
-        // Canary stats — the M0 measurement pins (the house canary
+        // Canary stats — the measurement pins (the in-repo canary
         // pattern: exact min/max, windowed mean; the probe's values are
         // the cross-check).
         let mn = plane.iter().min().copied().unwrap_or(u16::MAX);

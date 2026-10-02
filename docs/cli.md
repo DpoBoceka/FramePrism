@@ -660,9 +660,9 @@ with `--downscale2x` and the FRAMEPRISM_ENGINE=native engine seam.
 
 The base default's 3-candidate size-min trial selection on the 482
 grid (the pre-Stage-1 default, byte-frozen — the
-reference-product byte-parity contract at the measured 2.67×
-workload factor, the Stage-1 flip's named give-up): the reference
-product's 3 candidates per tile, the smallest stream wins. On the
+pre-Stage-1 byte-parity contract at the measured 2.67×
+workload factor, the Stage-1 flip's named give-up): the 3
+candidates per tile, the smallest stream wins. On the
 other grids: accepted-but-inert (the shipped selection is
 unaffected). Mutually exclusive with `--fast` (the named rc=2).
 

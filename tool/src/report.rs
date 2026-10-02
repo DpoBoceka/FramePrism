@@ -814,7 +814,7 @@ pub fn write_reports(
         // carry the re-derived class + the outcome's action word) +
         // the carried bytes (the sum of the carried frames' source
         // bytes — the byte copy, no re-encode). The raw-only clip's
-        // delta is this line alone (the byte-freeze clause: the
+        // delta is this line alone (the byte-identity clause: the
         // provenance section is absent, nothing else renders).
         let clip_idxs: Vec<usize> = frames
             .iter()
@@ -840,12 +840,12 @@ pub fn write_reports(
             std::collections::BTreeMap::new();
         let mut car_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
             std::collections::BTreeMap::new();
-        // The per-class transcoded split (the R0 ruling — the
+        // The per-class transcoded split (the
         // fp-camera class's lossless cell, the default): the census's
         // per-run action split gains the transcoded term ONLY when a
         // class has transcoded frames > 0 (the raw-only + the
         // `--carry`-mixed lines stay byte-identical to the carry
-        // forms — the byte-freeze clause).
+        // forms — the byte-identity clause).
         let mut trans_count: std::collections::BTreeMap<crate::frameclass::FrameClass, u64> =
             std::collections::BTreeMap::new();
         let mut carried_bytes = 0u64;
@@ -2250,11 +2250,11 @@ mod tests {
         // complement: the ENCODE path's contract (the pre-sample
         // census + the policy dispatch) is exercised in full.
         crate::worker::set_subset_flag(true);
-        // The R0 ruling moved this test's behavior: the fp ×
+        // The transcode default moved this test's behavior: the fp ×
         // lossless cell is now the TRANSCODE default; the assertions
         // below describe the `--carry` opt-in (the carry contract,
         // kept verbatim) — the process-wide flag is set explicitly
-        // (the ruling-moved rewire; every assertion unchanged; the
+        // (the default-moved rewire; every assertion unchanged; the
         // sticky set is safe — no other test encodes a mixed clip,
         // and the flag is a no-op outside the fp-camera class).
         crate::worker::set_carry_flag(true);

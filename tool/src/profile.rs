@@ -13,14 +13,14 @@
 //! the phases it completed; a resume-skipped frame writes NO row —
 //! the honest contract, named).
 //!
-//! The guarantee set (the 124-strength byte-freeze): the guard's
+//! The guarantee set (the 124-strength byte-identity contract): the guard's
 //! inactive form is ONE atomic load + a stack struct — no `Instant`,
 //! no heap allocation, no lock, no measurable call; the profiler
 //! NEVER touches the pixels/bytes of any output (it measures wall
 //! time of existing calls and writes a SEPARATE dotfile). The
 //! per-frame flush serializes on the sidecar's mutex (723 small
 //! writes — the overhead is in the measurement itself and is named
-//! as such in the lane's report — the profiled vs the unprofiled
+//! as such in the measurement record — the profiled vs the unprofiled
 //! control's wall pair IS the profiler's own cost).
 //!
 //! The phases (the stable string contract — the exact names):
@@ -37,10 +37,10 @@
 //! `archive-encode`, `archive-drill` ONLY (no fp phases, no fidelity
 //! — the raw path's verify is the bit-exact drill only); the FP
 //! frame's row = all eight. The guard sites are the A001
-//! default-lossless path (the lane's measurement target — the
+//! default-lossless path (the measurement target — the
 //! 723-clip + the KAT's standing clip); the other layout/mode
-//! branches are outside the lane's measurement scope (named in the
-//! lane's report).
+//! branches are outside the measurement scope (named in the
+//! measurement record).
 
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
@@ -50,7 +50,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 /// The process-wide gate (the `FRAMEPRISM_PROFILE` env's run-entry
-/// form — the CARRY_FLAG house pattern: set ONCE at the run entry
+/// form — the CARRY_FLAG pattern: set ONCE at the run entry
 /// (`init_from_env`), read by every guard). The test seam
 /// (`test_set`) writes the value directly (the KAT's entry — the
 /// gate is a VALUE, not a sticky flag).

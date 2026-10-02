@@ -261,8 +261,8 @@ pub(crate) struct Cli {
 
     /// The base default's 3-candidate size-min trial selection on the
     /// 482 grid (the pre-Stage-1 default, byte-frozen — the
-    /// reference-product byte-parity contract at the measured 2.67×
-    /// workload factor): the reference product's 3 candidates per
+    /// pre-Stage-1 byte-parity contract at the measured 2.67×
+    /// workload factor): the 3 candidates per
     /// tile, the smallest stream wins. On the other grids:
     /// accepted-but-inert (the shipped selection is unaffected).
     /// Mutually exclusive with `--fast` (the named rc=2)
@@ -296,7 +296,7 @@ pub(crate) struct Cli {
     pub(crate) subset: bool,
 
     /// The fp-camera frames ride the byte-exact source copy instead of
-    /// the transcode (the R0 ruling — the default is transcode:
+    /// the transcode (the default is transcode:
     /// the fp frame is decoded + re-encoded through the archive path so
     /// every output frame is in the measured archive contract). A
     /// no-op outside the fp-camera class (the raw-only behavior is

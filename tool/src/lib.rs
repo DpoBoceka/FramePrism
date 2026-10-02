@@ -618,7 +618,7 @@ mod env_compat_tests {
         }
         // The keep-anchors: the 20 recorded keep sites (the C/D/
         // exe-self-sha class + the two sanctioned full-file
-        // fallback reads — the PM-ruled pre-pass exception + the
+        // fallback reads — the pre-pass exception + the
         // frame-class scan's `BadIfdOffset` fallback; each fires its
         // named note line beside the read — + the temporal-oracle
         // neighbor read, silent by design) are in place.
@@ -646,7 +646,7 @@ mod env_compat_tests {
             // drill-verified same-tile plane within the pinned bound).
             // SILENT by design: unlike the sanctioned keeps it fires no
             // named note line — a refused drill still emits the
-            // EXISTING wording (the byte-freeze requires
+            // EXISTING wording (the byte-identity contract requires
             // encode/stdout silence on success).
             (include_str!("worker/encode.rs"), "std::fs::read(&cand_abs).ok()"),
             (include_str!("preflight.rs"), "match std::fs::read(path) {"),

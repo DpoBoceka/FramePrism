@@ -216,15 +216,15 @@ pub const GATE_UHD_H: u32 = 2170;
 pub const GATE_UHD_TILE_W_10: u32 = 964;
 
 /// The fp-camera lossless shape (the A001_013 tag-7 class
-/// fingerprint, the M0 census + the conformance KAT): the 512×368
+/// fingerprint, the census + the conformance KAT): the 512×368
 /// FULL-NOMINAL 8×6 = 48-tile grid at 12 bps on the 3856×2170 readout
 /// (3856 = 7×512 + 272 — the right column 272 px; 2170 = 5×368 + 330 —
 /// the last row 330 px: the ragged-edge tiles carry the off-frame
 /// padding INSIDE the full-nominal stream, and every tile decodes as
 /// the full 512×368 plane — 256×368 per component, the even/odd COLUMN
 /// split). Class-keyed: the decode eligibility (R1) + the class-keyed
-/// container check (R2) + the bounded-tail drill (R4 — the M0 RULING
-/// #1) all fire on this measured fingerprint, not on a depth/mode gate
+/// container check (R2) + the bounded-tail drill (R4)
+/// all fire on this measured fingerprint, not on a depth/mode gate
 /// (the fp frames are the CAMERA's own lossless output — a distinct
 /// class from the tool's own archive output, which rides the existing
 /// arms + the bit-exact drill unchanged).
@@ -507,7 +507,7 @@ impl Grid {
 /// the no-flag default routes through the shipped `--fast` selection
 /// (the family's fixed W7 head — `encode_tile_fast`), and the `--trial`
 /// flag restores the base default's 3-candidate size-min trial
-/// (byte-frozen — the reference-product byte-parity contract, whose
+/// (byte-frozen — the pre-Stage-1 byte-parity contract, whose
 /// measured 2.67× workload factor the flip names as the give-up). Every
 /// other grid's shipped selection discipline is UNTOUCHED (the other
 /// grids' byte-invariance pin — the 3K gate's measured bit-count key,
@@ -805,7 +805,7 @@ pub fn decode_tile_full_nominal(
 /// nominal `nominal_tw × th` plane — the PADDING CLIP). The
 /// input/output contract is the SAME as `decode_tile_full_nominal`
 /// (the reference-model path); the failure wording is intentionally
-/// invariant across the two paths (the failure-surface byte-freeze —
+/// invariant across the two paths (the failure-surface byte-identity —
 /// the golden-model decode failure names the contract, and the
 /// reference model stays the named authority of that contract).
 pub fn decode_tile_full_nominal_fast(
@@ -2340,7 +2340,7 @@ mod tests {
     }
 
     /// The fp full-nominal plane (the deterministic test content — the
-    /// decode.rs lane's `fp_test_plane` pattern, re-derived here so the
+    /// decode.rs's `fp_test_plane` pattern, re-derived here so the
     /// equivalence KATs stand in this module): 512×368, the phase-
     /// stratified + jittered 12-bit content (the decode-side KAT's
     /// synthetic-stream source).
@@ -2456,7 +2456,7 @@ mod tests {
     /// (the A001_013 standing + the A001_013_miniclips) decodes
     /// through the native fast seam to the SAME planes the reference
     /// model decodes (48/48 tiles per frame; the corpus-conditional
-    /// house pattern — the named skip on a clean checkout).
+    /// in-repo pattern — the named skip on a clean checkout).
     #[test]
     fn kat_fastdec_corpus_bit_exact_canary() {
         let dirs = [

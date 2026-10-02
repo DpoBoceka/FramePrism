@@ -214,7 +214,7 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
                 // Unknown — the named refusal class, the contract
                 // check below names it; a parse-failed frame is
                 // outside the contract's domain — the encode site's
-                // per-frame named refusal, the ruling's domain
+                // per-frame named refusal, the domain
                 // clause).
                 class: class_scan.0,
                 structure: class_scan.1,
@@ -264,7 +264,7 @@ fn ingest_gate_impl(input: &Path, frames: &[PathBuf], subset: bool) -> IngestGat
         // refusal (the pinned R5 wording — the 0-frames-touched
         // pre-job refusal, the established mechanism: the line rides
         // the per-clip failures + the run summary + rc!=0, before any
-        // frame processing). SCOPE (the PM ruling — the amended
+        // frame processing). SCOPE (the amended
         // R1/R2 domain clause): the set = the classes of the frames
         // WITH a readable compression structure (`in_contract_domain`);
         // a parse-failed frame (e.g. the strict parse's
