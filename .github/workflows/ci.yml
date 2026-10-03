@@ -337,6 +337,10 @@ jobs:
           cd tool
           cargo build --locked --release
 
+      - name: Build the gui app binary (the per-PR COMPILE signal — no artifact upload)
+        run: |
+          cargo build --locked --release --bin frameprism-gui
+
       - name: Run the windows runtime test (the file-identity collision + the walker guard — the identity proven on a real windows host)
         run: |
           cd tool
