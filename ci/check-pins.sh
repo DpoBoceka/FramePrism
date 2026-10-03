@@ -6,7 +6,7 @@
 #     CONTAIN the expected string (a version+commit is the contract —
 #     a version drift would silently change archive bytes).
 #   - lock-grep <crate>: the expected version must live in
-#     tool/Cargo.lock's entry for <crate> (the IN-PROCESS component
+#     the root Cargo.lock's entry for <crate> (the IN-PROCESS component
 #     pins — the bake container is built by the tar/zstd crates, not
 #     system tools, so the pin source is the lock, not a
 #     `--version` probe). The crate-name→version read is an awk pass
@@ -139,7 +139,7 @@ while IFS=$'\t' read -r component expected probe note; do
 
   if [ "$probe_type" = "lock-grep" ]; then
     # The in-process component pin: the version must
-    # live in tool/Cargo.lock's entry for the named crate (the
+    # live in the root Cargo.lock's entry for the named crate (the
     # container bytes are a pure function of the crate/lib versions —
     # no system tool in the loop; the fstool row pins the
     # bake --iso writer crate — the image's record layout is a pure
@@ -152,7 +152,7 @@ while IFS=$'\t' read -r component expected probe note; do
     # carries the bundled libzstd's version; the libzstd source is
     # the zstd-sys crate's vendored C tree at exactly that version).
     lock_name="$probe_flag"
-    LOCK="$REPO/tool/Cargo.lock"
+    LOCK="$REPO/Cargo.lock"
     if [ ! -f "$LOCK" ]; then
       echo "PIN FAIL $component :: expected $expected, got missing lock ($LOCK)"
       fail=$((fail+1)); continue
@@ -169,9 +169,9 @@ while IFS=$'\t' read -r component expected probe note; do
     case "$actual" in
       "$expected")
         if [ "$lock_name" = "zstd-sys" ]; then
-          echo "PIN OK $component :: zstd-sys $ver (tool/Cargo.lock — the bundled libzstd $actual)"
+          echo "PIN OK $component :: zstd-sys $ver (Cargo.lock — the bundled libzstd $actual)"
         else
-          echo "PIN OK $component :: $lock_name $actual (tool/Cargo.lock)"
+          echo "PIN OK $component :: $lock_name $actual (Cargo.lock)"
         fi
         ok=$((ok+1)) ;;
       *)

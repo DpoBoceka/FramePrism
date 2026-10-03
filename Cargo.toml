@@ -1,0 +1,13 @@
+# The workspace root: the two members — `tool` (the frameprism package:
+# the encode surface + the CLI) and `gui` (the frameprism-gui desktop
+# app — the cross-OS encode surface). The single committed lock is the
+# WORKSPACE lock at this root (Cargo.lock — the tool's entries ride
+# verbatim + the gui's graph is additive; every in-repo lock reference
+# points at this file). `ci/jxl-xcheck` stays EXCLUDED: the separate
+# locked crate (its own committed lock + its own pin — the
+# independent-decoder cross-check must not share the tool's resolution).
+
+[workspace]
+members = ["tool", "gui"]
+resolver = "2"
+exclude = ["ci/jxl-xcheck"]
