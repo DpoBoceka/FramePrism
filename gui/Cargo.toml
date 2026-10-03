@@ -1,0 +1,37 @@
+# The gui package: the FramePrism desktop app (the cross-OS encode
+# surface). It consumes the core IN-PROCESS (the path dependency —
+# no FFI, no facade crate): the encode job is the worker's
+# `process_dir`, the clip list is the camera's offload detection scan.
+#
+# The v1 surface is the encode: the source dir → the clip list → the
+# encode job with per-clip progress. The path fields are TEXT-ONLY in
+# v1 (no native dialog crate — the dependency graph stays eframe-only
+# + the core).
+[package]
+name = "frameprism-gui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "The FramePrism desktop GUI — the cross-OS encode surface (the egui app)"
+license = "MIT"
+repository = "https://github.com/DpoBoceka/frameprism"
+homepage = "https://github.com/DpoBoceka/frameprism"
+publish = false
+
+[lib]
+name = "frameprism_gui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "frameprism-gui"
+path = "src/main.rs"
+
+[dependencies]
+# The core (in-process — the encode surface + the offload detection
+# scan).
+frameprism = { path = "../tool" }
+# The exact version pin (the contract-build posture — the GUI's dep
+# graph is audit-covered by the gate's dependency-audit step over the
+# root lock). Declared MSRV 1.95 (this crate's rust-version carries
+# the floor; the tool keeps its own declared 1.80).
+eframe = "=0.36.2"

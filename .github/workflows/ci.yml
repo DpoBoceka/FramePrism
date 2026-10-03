@@ -38,6 +38,7 @@ on:
     branches: [main]
     paths:
       - tool/**
+      - gui/**
       - ci/**
       - deps/**
       - testdata/**
@@ -49,12 +50,15 @@ on:
       - NOTICE.md
       - LICENSE
       - Makefile
+      - Cargo.toml
+      - Cargo.lock
       - .github/**
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
     paths:
       - tool/**
+      - gui/**
       - ci/**
       - deps/**
       - testdata/**
@@ -66,6 +70,8 @@ on:
       - NOTICE.md
       - LICENSE
       - Makefile
+      - Cargo.toml
+      - Cargo.lock
       - .github/**
 
 concurrency:
@@ -99,14 +105,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Install the Rust toolchain (1.98)
@@ -131,8 +137,9 @@ jobs:
     # supported build). Evidences the README's fact that Linux remains
     # a source-portability target without a contract build. `--locked`
     # keeps the committed Cargo.lock authoritative (a drift is a named
-    # FAIL, not a silent re-resolve). The run step is from the manifest
-    # root (tool/ — the repo root has no Cargo.toml).
+    # FAIL, not a silent re-resolve). The run step is root-level
+    # workspace-scoped (the workspace root's Cargo.toml — the gui crate
+    # joins the source-portability check).
     name: cargo check --locked (ubuntu-latest — source-portability CHECK only, not a contract build)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -151,13 +158,12 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Source-portability check (NOT the contract build)
         run: |
-          cd tool
-          cargo check --locked
+          cargo check --locked --workspace
 
   build-linux:
     # The release-binary BUILD + artifact (ubuntu-latest): the pinned
@@ -168,7 +174,9 @@ jobs:
     # host-built prefix (the committed prefix is a darwin build —
     # linking it here is a named refusal, never a silent fallback).
     # cargo build --locked --release (the --locked posture of the check
-    # job) + the artifact. This is NOT the contract build (the contract
+    # job) + the artifact. The gui app binary is built for the per-PR
+    # COMPILE signal (no artifact upload — the release assets are
+    # release.yml's). This is NOT the contract build (the contract
     # is the macos-latest job against the committed prefix). Known
     # limit (the jxl path): --codec jxl spawns cjxl/djxl from PATH at
     # runtime; the committed pins are mac-only, so this artifact uses
@@ -194,14 +202,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Build the pinned deps for this host (the patched static prefix)
@@ -213,6 +221,10 @@ jobs:
         run: |
           cd tool
           cargo build --locked --release
+
+      - name: Build the gui app binary (the per-PR COMPILE signal — no artifact upload)
+        run: |
+          cargo build --locked --release --bin frameprism-gui
 
       - name: Upload the linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -227,8 +239,11 @@ jobs:
     # supported build). Evidences the README's fact that Windows
     # remains a source-portability target without a contract build.
     # `--locked` keeps the committed Cargo.lock authoritative (a drift
-    # is a named FAIL, not a silent re-resolve). The run step is from
-    # the manifest root (tool/ — the repo root has no Cargo.toml).
+    # is a named FAIL, not a silent re-resolve). The run step is
+    # root-level workspace-scoped (the workspace root's Cargo.toml —
+    # the gui crate joins the source-portability check; the host dep
+    # build step stays as-is — the job-level JPEG_TURBO_PREFIX env
+    # covers the gui crate's build.rs too).
     # The host dep build step (additive): tool/build.rs resolves the
     # JPEG_TURBO_PREFIX even under cargo check, and the committed
     # prefix is a darwin build that lacks the MSVC static names
@@ -257,7 +272,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Build the pinned deps for this host (the patched static prefix)
@@ -267,8 +282,7 @@ jobs:
 
       - name: Source-portability check (NOT the contract build)
         run: |
-          cd tool
-          cargo check --locked
+          cargo check --locked --workspace
 
   build-windows:
     # The release-binary BUILD + artifact (windows-latest, the bash
@@ -303,14 +317,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Build the pinned deps for this host (the patched static prefix)
