@@ -1,0 +1,52 @@
+# The gui package: the FramePrism desktop app (the cross-OS encode
+# surface). It consumes the core IN-PROCESS (the path dependency —
+# no FFI, no facade crate): the encode job is the worker's
+# `process_dir`, the clip list is the camera's offload detection scan.
+#
+# The v1 surface is the encode: the source dir → the clip list → the
+# encode job with per-clip progress. The path fields are text-editable
+# + the native folder pickers (the `Browse…` buttons — the rfd sync
+# pick; the Linux backend is the xdg-portal one — NO GTK build dep,
+# the v1 ruling's constraint; the macOS/Windows backends are the
+# native system-API dialogs).
+[package]
+name = "frameprism-gui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "The FramePrism desktop GUI — the cross-OS encode surface (the egui app)"
+license = "MIT"
+repository = "https://github.com/DpoBoceka/frameprism"
+homepage = "https://github.com/DpoBoceka/frameprism"
+publish = false
+
+[lib]
+name = "frameprism_gui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "frameprism-gui"
+path = "src/main.rs"
+
+[dependencies]
+# The core (in-process — the encode surface + the offload detection
+# scan).
+frameprism = { path = "../tool" }
+# The exact version pins (the contract-build posture — the GUI's dep
+# graph is audit-covered by the gate's dependency-audit step over the
+# root lock). Declared MSRV 1.95 (this crate's rust-version carries
+# the floor; the tool keeps its own declared 1.80).
+eframe = "=0.36.2"
+# The native folder pickers (the Browse buttons) — the current stable
+# exact pin (M0 2026-10-03: rfd 0.17.2, the crate's MSRV 1.88 per its
+# own 0.17.2 changelog — below this crate's 1.95 floor). The
+# `default-features = false` drops the default `wayland` feature — its
+# `wayland-backend/client_system` → `wayland-sys/client` probes the
+# system wayland-client dev package at BUILD time (the pkg-config
+# probe — the libwayland-dev build dep); the kept `xdg-portal` backend
+# is the pure-Rust build surface (pollster + the crate's own dlopen'd
+# libdbus FFI, the zenity runtime fallback) — NO GTK build dep, no
+# system-dep surface (the v1 ruling's constraint; the dep graph stays
+# frameprism + eframe + rfd). The macOS/Windows backends are the
+# native system-API dialogs (no feature needed).
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal"] }

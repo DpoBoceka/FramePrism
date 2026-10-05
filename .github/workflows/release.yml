@@ -1,7 +1,9 @@
 # The tag release: a `v*` tag push builds the 3-OS release binaries
 # (build-macos / build-linux / build-windows — the proven ci.yml build
-# shapes) and publishes them as the GitHub release assets (+ the
-# SHA256SUMS checksum file over the three files).
+# shapes) + the gui app binary per OS (the desktop app — the same
+# `--locked` posture, no window at CI time), and publishes them as the
+# GitHub release assets (+ the SHA256SUMS checksum file over the six
+# files).
 #
 # Tag-only trigger (no branches, no PRs): the release runs are the
 # tag's. The tag points at a gated main (the contract gate ran on
@@ -78,14 +80,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Build the pinned deps for this host (the patched static prefix)
@@ -98,11 +100,21 @@ jobs:
           cd tool
           cargo build --locked --release
 
+      - name: Build the gui app binary (the release asset — the same --locked posture)
+        run: |
+          cargo build --locked --release --bin frameprism-gui
+
       - name: Upload the macos artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: frameprism-macos-aarch64
           path: target/release/frameprism
+
+      - name: Upload the gui artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: frameprism-gui-macos-aarch64
+          path: target/release/frameprism-gui
 
   build-linux:
     # The release-binary BUILD + artifact (ubuntu-latest): the pinned
@@ -139,14 +151,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Build the pinned deps for this host (the patched static prefix)
@@ -159,11 +171,21 @@ jobs:
           cd tool
           cargo build --locked --release
 
+      - name: Build the gui app binary (the release asset — the same --locked posture)
+        run: |
+          cargo build --locked --release --bin frameprism-gui
+
       - name: Upload the linux artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: frameprism-linux-x86_64
           path: target/release/frameprism
+
+      - name: Upload the gui artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: frameprism-gui-linux-x86_64
+          path: target/release/frameprism-gui
 
   build-windows:
     # The release-binary BUILD + artifact (windows-latest, the bash
@@ -198,14 +220,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('tool/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache the cargo target dir (additive — the toolchain-bound key)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('tool/Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
+          key: ${{ runner.os }}-cargo-target-1.98-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('tool/src/**/*.rs', 'tool/build.rs', 'tool/ljpeg_shim.c') }}-${{ hashFiles('deps/fetch.sh', 'deps/build-libjpeg.sh') }}
           restore-keys: ${{ runner.os }}-cargo-target-1.98-
 
       - name: Build the pinned deps for this host (the patched static prefix)
@@ -218,6 +240,10 @@ jobs:
           cd tool
           cargo build --locked --release
 
+      - name: Build the gui app binary (the release asset — the same --locked posture)
+        run: |
+          cargo build --locked --release --bin frameprism-gui
+
       - name: Run the windows runtime test (the file-identity collision + the walker guard — the identity proven on a real windows host)
         run: |
           cd tool
@@ -229,15 +255,22 @@ jobs:
           name: frameprism-windows-x86_64.exe
           path: target/release/frameprism.exe
 
+      - name: Upload the gui artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: frameprism-gui-windows-x86_64.exe
+          path: target/release/frameprism-gui.exe
+
   publish:
     # The release publish (ubuntu-latest, needs the three builds):
-    # the three downloaded artifacts (renamed to the normalized asset
-    # names — the mac/linux artifacts both carry the file `frameprism`,
-    # so each lands in its own subdir first) + the SHA256SUMS checksum
-    # file over the three files + the softprops publish (the release
-    # name = the tag; fail_on_unmatched keeps a re-run of the tag an
-    # update, not a FAIL).
-    name: "publish: the release (the 3-OS binaries + SHA256SUMS)"
+    # the three tool artifacts + the three gui artifacts (renamed to
+    # the normalized asset names — the mac/linux artifacts both carry
+    # the file `frameprism` / `frameprism-gui`, so each lands in its
+    # own subdir first) + the SHA256SUMS checksum file over the six
+    # files + the softprops publish (the release name = the tag;
+    # fail_on_unmatched keeps a re-run of the tag an update, not a
+    # FAIL).
+    name: "publish: the release (the 3-OS binaries + the 3-OS gui binaries + SHA256SUMS)"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-macos, build-linux, build-windows]
@@ -262,16 +295,37 @@ jobs:
           name: frameprism-windows-x86_64.exe
           path: dist/windows
 
-      - name: Normalize the asset names (+ the SHA256SUMS over the three files)
+      - name: Download the gui macos artifact (its own subdir — the file inside is `frameprism-gui`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-gui-macos-aarch64
+          path: dist/guimacos
+
+      - name: Download the gui linux artifact (its own subdir — the file inside is `frameprism-gui`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-gui-linux-x86_64
+          path: dist/guilinux
+
+      - name: Download the gui windows artifact (its own subdir — the file inside is `frameprism-gui.exe`)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: frameprism-gui-windows-x86_64.exe
+          path: dist/guiwindows
+
+      - name: Normalize the asset names (+ the SHA256SUMS over the six files)
         run: |
           mv dist/macos/frameprism dist/frameprism-macos-aarch64
           mv dist/linux/frameprism dist/frameprism-linux-x86_64
           mv dist/windows/frameprism.exe dist/frameprism-windows-x86_64.exe
-          rm -rf dist/macos dist/linux dist/windows
-          (cd dist && sha256sum frameprism-macos-aarch64 frameprism-linux-x86_64 frameprism-windows-x86_64.exe > SHA256SUMS)
+          mv dist/guimacos/frameprism-gui dist/frameprism-gui-macos-aarch64
+          mv dist/guilinux/frameprism-gui dist/frameprism-gui-linux-x86_64
+          mv dist/guiwindows/frameprism-gui.exe dist/frameprism-gui-windows-x86_64.exe
+          rm -rf dist/macos dist/linux dist/windows dist/guimacos dist/guilinux dist/guiwindows
+          (cd dist && sha256sum frameprism-macos-aarch64 frameprism-linux-x86_64 frameprism-windows-x86_64.exe frameprism-gui-macos-aarch64 frameprism-gui-linux-x86_64 frameprism-gui-windows-x86_64.exe > SHA256SUMS)
           cat dist/SHA256SUMS
 
-      - name: Publish the release (the tag's name + the three binaries + SHA256SUMS)
+      - name: Publish the release (the tag's name + the six binaries + SHA256SUMS)
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
         with:
           tag_name: ${{ github.ref_name }}
@@ -280,11 +334,15 @@ jobs:
             dist/frameprism-macos-aarch64
             dist/frameprism-linux-x86_64
             dist/frameprism-windows-x86_64.exe
+            dist/frameprism-gui-macos-aarch64
+            dist/frameprism-gui-linux-x86_64
+            dist/frameprism-gui-windows-x86_64.exe
             dist/SHA256SUMS
           body: |
             FramePrism ${{ github.ref_name }} — the prebuilt binaries (built from the tagged commit).
 
             Platforms: macOS (arm64) · Linux (x86_64) · Windows (x86_64).
+            The desktop app (the encode surface): the `frameprism-gui-*` assets — the same platforms as the CLI.
             The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
             Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
             The downloaded binary is not marked executable — `chmod +x frameprism-*` after the download (macOS/Linux).

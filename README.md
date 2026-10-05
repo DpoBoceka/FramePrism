@@ -64,6 +64,7 @@ Prebuilt binaries for macOS (arm64), Linux (x86_64) and Windows (x86_64) are on 
 Verify the download against the `SHA256SUMS` in the release assets (`sha256sum -c` / the certutil equivalent).
 The downloaded binary is not marked executable — `chmod +x frameprism-*` after the download (macOS/Linux).
 The Linux build targets the ubuntu-24.04 runner (glibc 2.39+); the source build (the Quick start) works on all three platforms with the host-prefix setup.
+The desktop app binaries (`frameprism-gui-*`) ship on the same release page (the GUI section below).
 
 ## CLI
 
@@ -88,6 +89,59 @@ Commands:
 ```
 <!-- frameprism-help-commands:end -->
 
+## GUI (the desktop encode surface)
+
+`frameprism-gui` is the desktop app for the encode surface: the same
+in-process core the CLI dispatches (the `process_dir` path — the encode
+bytes are the CLI's), in a window. The current surface:
+
+- **Source + scan** — point the app at a source dir (the clip dirs + the
+  sidecars, as the CLI's positional `in`); the scan rows the detected
+  clips (the key + the detection class).
+- **The mode** — Lossless (the default) or Log10 (10-bit). Any other
+  mode is the named refusal: the GUI's encode surface offers lossless +
+  log10 (the lossy tier + the CLI's full mode set stay the CLI's).
+- **Destination** — the output root (the CLI's positional `to` shape:
+  one output clip dir per selected clip). An in-place destination (the
+  destination inside the source) is the named refusal.
+- **Profile (optional)** — the camera-identity seam (the core's
+  `FRAMEPRISM_PROFILES` resolution seam): a profile file field + a
+  native file `Browse…` pick (the rfd sync pick: a pick replaces the
+  field text, a cancel leaves it unchanged). The probe order: the
+  field → the launch env (`FRAMEPRISM_PROFILES` when the app was
+  started with it) → `<cwd>/profiles` → `<exe-dir>/profiles`. A
+  non-file field is the named pre-job refusal (the core's env seam
+  accepts an explicit profile file only — the job does not start).
+- **The job** — Start encode runs the selected clips to completion
+  (one job thread; a failed clip is named in the job state and the
+  remaining clips continue). The job runs to completion — no cancel in
+  v1. The verdict line is the CLI's: `rc=0 (all clips clean)` /
+  `rc=1 (<k> of <n> clips failed)`.
+
+Build + run (the workspace root):
+
+```sh
+cargo run --release -p frameprism-gui        # the window
+target/release/frameprism-gui --selftest     # the headless selftest (no window)
+```
+
+The selftest is the headless proof (no window / GPU): it encodes the
+committed one-frame fixture clip end-to-end (the committed profile via
+the `FRAMEPRISM_PROFILES` resolution) and prints
+`gui selftest: OK (1/1 clips, rc=0, lossless)` on success. The gate
+runs it in CI (the gui gate step: the release build + the 5-test lib
+suite + the selftest).
+
+Known limits (the desktop app's):
+
+- the encode surface is lossless + log10 — the CLI's full mode set
+  (the lossy tier), the offload/audit/decode verbs, and the archive
+  verbs (bake/derive/diff/repair/…) are the CLI's; the GUI is the
+  encode surface only;
+- no cancel — the job runs to completion;
+- the camera × mode coverage is the profiles' — the same named refusal
+  as the CLI (the unmeasured combination is refused, not guessed).
+
 ## Build contract (the short version)
 
 On macOS (the gate toolchain), a bare `cargo build` IS the contract build — build.rs links
@@ -107,6 +161,9 @@ To rebuild the committed prefix from the pinned source: `deps/fetch.sh` +
 tool/            Rust CLI + codec (src/: tiff, pack12, tileenc, surgery,
                  lossydct, dct2s, ljpeg_shim.c, worker, verify; the
                  cargo-fuzz target in tool/fuzz/)
+gui/             the desktop app (the egui encode surface — the
+                 frameprism-gui bin over the in-process core; the
+                 --selftest headless proof)
 ci/              the CI gate + the byte-identity oracles (check.sh +
                  the check-*.sh legs, pins.tsv, fuzz-corpus/, oracle10/,
                  oracle108/)

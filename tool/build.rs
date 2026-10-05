@@ -184,14 +184,15 @@ fn main() {
     // (in-process)` (the zstd value is the RUNTIME
     // `zstd::ZSTD_versionString()` — the bundled libzstd), and the
     // pin rows assert their expected against the value embedded HERE
-    // (the crate versions, read from the committed Cargo.lock — the
+    // (the crate versions, read from the committed workspace-root
+    // Cargo.lock — the workspace root is the crate's parent dir — the
     // lock IS the pin; a missing entry or a name/version pair the
  // lock does not carry is a NAMED build refusal, the project
     // convention, never a silent default). The `fstool` entry is the
  // same class ( — the in-process ISO writer for `bake
     // --iso`: the version the pin row asserts + the bake summary's
     // build-fact line key off it).
-    let lock = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock");
+    let lock = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("Cargo.lock");
     let crate_version = |name: &str| -> Option<String> {
         std::fs::read_to_string(&lock).ok().and_then(|text| {
             let mut lines = text.lines();

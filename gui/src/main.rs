@@ -1,0 +1,396 @@
+//! The eframe shell (the windowed GUI — the utility shape). `--selftest`
+//! is handled FIRST (before any eframe/window/GPU import executes — the
+//! headless selftest, the lib path only: no window, no GPU).
+//!
+//! The v1 surface is the encode: the source dir → the clip list (the
+//! offload detection scan) → the encode job with per-clip progress
+//! (the core exposes no live frame-level progress — the honest unit is
+//! the clip). No cancel (the job runs to completion — an honest
+//! absence, not a hidden one), no offload/verify/wipe verbs. The path
+//! fields are text-editable + the native pickers (the
+//! `Browse…` buttons — the rfd sync pick: a pick REPLACES the field
+//! text, a cancel leaves it UNCHANGED — a cancel is not an error, no
+//! status line). The profile field is the camera-identity seam (the
+//! `FRAMEPRISM_PROFILES` env — the probe order: the field → the
+//! launch env → the core's own `<cwd>/profiles` → `<exe-dir>/profiles`).
+
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use eframe::egui;
+
+const WINDOW_TITLE: &str = "FramePrism — encode";
+const NO_CLIPS: &str = "no clips detected";
+const MODE_LOSSLESS: &str = "Lossless";
+const MODE_LOG10: &str = "Log10";
+const HONESTY_NOTE: &str = "the job runs to completion — no cancel in v1";
+/// The job-state poll cadence (~4 Hz — the UI's snapshot of the
+/// per-job worker thread's shared state).
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+struct App {
+    source: String,
+    dest: String,
+    profile: String,
+    /// `FRAMEPRISM_PROFILES` at the app launch, captured ONCE (the
+    /// seam's fall-through when the profile field is empty — R2).
+    launch_env: String,
+    mode_label: String,
+    rows: Vec<frameprism_gui::ClipRow>,
+    checked: Vec<bool>,
+    job: Option<Arc<Mutex<frameprism_gui::JobState>>>,
+    snapshot: Option<frameprism_gui::JobState>,
+    running: bool,
+    last_poll: Instant,
+    status: String,
+    done_line: Option<String>,
+}
+
+impl App {
+    fn new() -> Self {
+        Self {
+            source: String::new(),
+            dest: String::new(),
+            profile: String::new(),
+            // The launch value of the env seam (captured ONCE — the
+            // seam's fall-through when the field is empty; R2).
+            launch_env: std::env::var("FRAMEPRISM_PROFILES").unwrap_or_default(),
+            mode_label: MODE_LOSSLESS.to_string(),
+            rows: Vec::new(),
+            checked: Vec::new(),
+            job: None,
+            snapshot: None,
+            running: false,
+            last_poll: Instant::now(),
+            status: "the v1 surface: the source dir → Scan → the clip list → Start encode"
+                .to_string(),
+            done_line: None,
+        }
+    }
+
+    /// The on-demand re-scan (the clip list refresh — the core's own
+    /// named line on failure, the EMPTY vec on an empty scan — the
+    /// UI renders the honest `no clips detected` line, never a silent
+    /// empty list).
+    fn do_scan(&mut self) {
+        let src = std::path::Path::new(&self.source);
+        match frameprism_gui::clips(src) {
+            Ok(rows) => {
+                self.checked = vec![true; rows.len()]; // default all-on
+                self.status = format!("scanned: {} clip(s)", rows.len());
+                self.rows = rows;
+            }
+            Err(err) => {
+                self.rows = Vec::new();
+                self.checked = Vec::new();
+                self.status = err; // the named line — never hidden
+            }
+        }
+    }
+
+    /// The native folder pick (the `Browse…` button) for one of the
+    /// two path fields (the source / the dest): the rfd SYNC picker,
+    /// opened at the current field text when it names an existing
+    /// dir. A pick REPLACES the field text; a cancel leaves it
+    /// UNCHANGED (no status line — a cancel is not an error, the
+    /// honest absence). The Scan button stays EXPLICIT (the browse
+    /// does not auto-scan — the owner's control). An associated fn
+    /// (not a `&mut self` method): the `Self::do_browse(&mut
+    /// self.field)` call keeps the single disjoint field borrow (a
+    /// whole-self `&mut self` receiver + a `&mut` field arg would be
+    /// the E0499 overlap).
+    fn do_browse(field: &mut String) {
+        let mut picker = rfd::FileDialog::new();
+        if std::path::Path::new(field.as_str()).is_dir() {
+            picker = picker.set_directory(field.as_str());
+        }
+        if let Some(path) = picker.pick_folder() {
+            *field = path.to_string_lossy().into_owned();
+        }
+    }
+
+    /// The native FILE pick (the Profile row's `Browse…` button): the
+    /// rfd SYNC `pick_file` (the `do_browse` pattern generalized to
+    /// the file domain — the picker opens at the current field text
+    /// when it names an existing file (its parent dir) or an existing
+    /// dir). A pick REPLACES the field text; a cancel leaves it
+    /// UNCHANGED (no status line — a cancel is not an error, the
+    /// honest absence). An associated fn (the `do_browse` borrow
+    /// reason).
+    fn do_browse_file(field: &mut String) {
+        let mut picker = rfd::FileDialog::new();
+        let p = std::path::Path::new(field.as_str());
+        if p.is_file() {
+            if let Some(dir) = p.parent() {
+                picker = picker.set_directory(dir);
+            }
+        } else if p.is_dir() {
+            picker = picker.set_directory(field.as_str());
+        }
+        if let Some(path) = picker.pick_file() {
+            *field = path.to_string_lossy().into_owned();
+        }
+    }
+
+    /// The encode job start (the pre-job refusals render as the NAMED
+    /// line in the status row — never hidden; a started job owns the
+    /// shared `JobState` the UI polls at ~4 Hz).
+    fn do_start(&mut self) {
+        let mode = match frameprism_gui::arbiter(self.mode_label.to_lowercase().as_str()) {
+            Ok(mode) => mode,
+            Err(err) => {
+                self.status = err;
+                return;
+            }
+        };
+        // The profile pre-job refusal (the fast honest path — the
+        // core's env seam accepts an explicit profile file ONLY, so a
+        // non-file field would be the core's per-clip `not a file`
+        // refusal, 14 empty dest dirs: the job does NOT start).
+        let profile = self.profile.trim();
+        if !profile.is_empty() && !std::path::Path::new(profile).is_file() {
+            self.status = format!(
+                "refusal: the profile is not a file (the core's env seam accepts an explicit profile file only): {profile}"
+            );
+            return;
+        }
+        let keys: Vec<String> = self
+            .rows
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| self.checked.get(*i).copied().unwrap_or(false))
+            .map(|(_, row)| row.key.clone())
+            .collect();
+        let src = std::path::Path::new(&self.source);
+        let dst = std::path::Path::new(&self.dest);
+        // The env seam (the GUI process is the SOLE owner — the
+        // selftest precedent; the job thread reads the env it starts
+        // with). The invariant: the env AFTER do_start is EXACTLY the
+        // seam's effective value or absent (the None arm's remove is
+        // a harmless no-op that makes it explicit).
+        match frameprism_gui::profile_env_seam(&self.profile, &self.launch_env) {
+            Some(p) => std::env::set_var("FRAMEPRISM_PROFILES", p),
+            None => std::env::remove_var("FRAMEPRISM_PROFILES"),
+        }
+        let state = Arc::new(Mutex::new(frameprism_gui::JobState::default()));
+        match frameprism_gui::start_encode(src, dst, mode, &keys, state.clone()) {
+            Ok(()) => {
+                self.job = Some(state);
+                self.snapshot = None;
+                self.done_line = None;
+                self.running = true;
+                self.last_poll = Instant::now();
+                self.status = "job started".to_string();
+            }
+            Err(err) => {
+                self.status = err; // the named line — never hidden
+            }
+        }
+    }
+
+    /// The ~4 Hz poll (the job-state snapshot — the UI never holds the
+    /// shared lock for more than the snapshot read; the per-job
+    /// worker thread owns the writes).
+    fn poll_job(&mut self) {
+        let Some(job) = &self.job else {
+            return;
+        };
+        let snap = frameprism_gui::poll(job);
+        if snap.finished {
+            self.running = false;
+            self.job = None;
+            if let Some(verdict) = snap.verdict.clone() {
+                // The VERBATIM verdict line + the dest path on
+                // completion.
+                self.done_line = Some(format!("{verdict} — dest: {}", self.dest));
+            }
+        }
+        self.snapshot = Some(snap);
+    }
+}
+
+impl eframe::App for App {
+    /// The pre-ui logic (the no-painting phase — the job poll at the
+    /// ~4 Hz cadence + the continuous repaint while a job runs).
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.running {
+            if Instant::now().duration_since(self.last_poll) >= POLL_INTERVAL {
+                self.last_poll = Instant::now();
+                self.poll_job();
+            }
+            // The continuous repaint at the poll cadence (the job's
+            // progress + verdict land at ~4 Hz while it runs).
+            ctx.request_repaint_after(POLL_INTERVAL);
+        }
+    }
+
+    /// The UI (the utility shape — the seven surface elements).
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ui, |ui| {
+            // (1) the source dir + the on-demand scan + the native
+            // Browse pick.
+            ui.horizontal(|ui| {
+                ui.label("Source dir");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.source)
+                        .hint_text("/path/to/card")
+                        .desired_width(420.0),
+                );
+                if ui.button("Scan").clicked() {
+                    self.do_scan();
+                }
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse(&mut self.source);
+                }
+            });
+            ui.separator();
+
+            // The clip list (one row per clip — the checkbox (default
+            // all-on) + the key + the class; an empty scan renders the
+            // honest line).
+            if self.rows.is_empty() {
+                ui.weak(NO_CLIPS);
+            } else {
+                egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                    for (i, row) in self.rows.iter().enumerate() {
+                        let mut on = self.checked.get(i).copied().unwrap_or(false);
+                        ui.checkbox(&mut on, format!("{} — {}", row.key, row.class));
+                        self.checked[i] = on;
+                    }
+                });
+            }
+            ui.separator();
+
+            // (2) the mode (the combo — Lossless default / Log10).
+            ui.horizontal(|ui| {
+                ui.label("Mode");
+                egui::ComboBox::from_label("")
+                    .selected_text(self.mode_label.clone())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.mode_label,
+                            MODE_LOSSLESS.to_string(),
+                            MODE_LOSSLESS,
+                        );
+                        ui.selectable_value(
+                            &mut self.mode_label,
+                            MODE_LOG10.to_string(),
+                            MODE_LOG10,
+                        );
+                    });
+            });
+
+            // (3) the dest dir (text + the native Browse pick).
+            ui.horizontal(|ui| {
+                ui.label("Dest dir");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.dest)
+                        .hint_text("/path/to/encoded")
+                        .desired_width(420.0),
+                );
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse(&mut self.dest);
+                }
+            });
+
+            // (4) the profile (the camera-identity seam — optional;
+            // the field → the launch env → the core's own probe
+            // order; the Browse pick is the native FILE pick).
+            ui.horizontal(|ui| {
+                ui.label("Profile (optional)");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.profile)
+                        .hint_text("~/checkouts/frameprism/profiles/a001-sigma-fp.profile")
+                        .desired_width(420.0),
+                );
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse_file(&mut self.profile);
+                }
+            });
+            ui.weak(
+                "probe order: the field → the launch env (FRAMEPRISM_PROFILES) → <cwd>/profiles → <exe-dir>/profiles",
+            );
+
+            // (5) the start (disabled while a job runs — the pre-job
+            // refusals land in the status row as the named line).
+            ui.horizontal(|ui| {
+                let response = ui.add_enabled(!self.running, egui::Button::new("Start encode"));
+                if response.clicked() {
+                    self.do_start();
+                }
+            });
+            ui.separator();
+
+            // (6) the progress (the bar + the current clip key + the
+            // running line; the verdict line + the dest path on
+            // completion).
+            if self.running {
+                if let Some(snap) = &self.snapshot {
+                    let frac = if snap.total == 0 {
+                        0.0
+                    } else {
+                        snap.done as f32 / snap.total as f32
+                    };
+                    ui.add(
+                        egui::ProgressBar::new(frac)
+                            .text(format!("{}/{}", snap.done, snap.total)),
+                    );
+                    if let Some(current) = &snap.current {
+                        ui.label(format!("current clip: {current}"));
+                    }
+                    ui.label(format!(
+                        "job running — {}/{}",
+                        snap.done, snap.total
+                    ));
+                    if let Some(err) = &snap.last_error {
+                        ui.colored_label(egui::Color32::RED, err.as_str());
+                    }
+                }
+            }
+            if let Some(line) = &self.done_line {
+                ui.strong(line.as_str());
+            }
+            // The status row (the refusals + the scan results — never
+            // hidden).
+            ui.monospace(&self.status);
+            ui.separator();
+
+            // (7) the static honesty note (the honest absence — there
+            // is NO cancel button; the core exposes no cancel handle).
+            ui.weak(HONESTY_NOTE);
+        });
+    }
+}
+
+fn main() {
+    // `--selftest` is handled FIRST (before any eframe/window/GPU
+    // import executes — the headless selftest, the lib path only):
+    // the VERBATIM OK line (one line, stdout) + exit 0, or the named
+    // FAIL line + exit 1.
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--selftest") {
+        match frameprism_gui::selftest() {
+            Ok(()) => {
+                println!("gui selftest: OK (1/1 clips, rc=0, lossless)");
+                std::process::exit(0);
+            }
+            Err(reason) => {
+                println!("gui selftest: FAIL — {reason}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title(WINDOW_TITLE)
+            .with_inner_size([760.0, 520.0]),
+        ..Default::default()
+    };
+    let res =
+        eframe::run_native(WINDOW_TITLE, options, Box::new(|_cc| Ok(Box::new(App::new()))));
+    if let Err(err) = res {
+        eprintln!("frameprism-gui: the window failed to start: {err}");
+        std::process::exit(1);
+    }
+}

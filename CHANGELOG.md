@@ -2,6 +2,36 @@
 
 All notable changes to frameprism.
 
+## gui 0.1.0
+
+- The desktop GUI (the encode surface) — `frameprism-gui`: the in-process
+  encode job over the core (the same `process_dir` path the CLI dispatches
+  — the encode bytes are the CLI's), in the egui/eframe window: the source
+  scan (the clip rows + the detection class), the lossless / log10 mode
+  (any other mode is the named refusal), the destination + the in-place
+  refusal, the run-to-completion job (no cancel) + the CLI verdict lines.
+  The prebuilt `frameprism-gui-*` binaries ship per OS on the release
+  page.
+- The Profile row (the camera-identity seam) — the optional profile
+  field + the native file pick (the rfd sync pick): the GUI process is
+  the sole owner of the `FRAMEPRISM_PROFILES` env (the field wins over
+  the launch env; both empty = the core's own `<cwd>/profiles` →
+  `<exe-dir>/profiles` probe order stands untouched); a non-file field
+  is the named pre-job refusal (the core's env seam accepts an
+  explicit profile file only — the job does not start).
+- The workspace root — the `Cargo.toml` + the `Cargo.lock` ride the
+  repository root (the tool's lock moved; the tool's `--help` surface, the
+  suite counts, and the oracle byte contracts stand unmodified under the
+  move).
+- The gate — the gui step joins the check gate (the gui release build +
+  the 5-test lib suite + the headless selftest — the `gui selftest: OK
+  (1/1 clips, rc=0, lossless)` line); the offline audit rides the
+  workspace lock.
+- The release — the release workflow builds + publishes the
+  `frameprism-gui-*` binaries per OS (the SHA256SUMS now covers the six
+  files); the per-PR CI builds the gui binary for the compile signal +
+  the source-portability check jobs are workspace-scoped.
+
 ## 0.3.0
 
 - The mixed-compression input — a clip may now mix raw (uncompressed) frames and fp-camera lossless frames in one encode: the frame classifier dispatches each frame to its own path (the raw frames to the archive's raw path, the fp-camera lossless frames to the transcode path through the archive's encode); `--carry` lets the eligible fp frames ride carried (untranscoded) instead, with the per-frame provenance in the report; a mixed clip's dry-run carries the both-estimates line (carried vs transcoded, size). The whole-body-divergent fp tile is accepted when its decoded plane matches the decoded same-class fp neighbor's same-tile plane within the pinned temporal bound (the temporal oracle — it adds acceptance only; every existing refusal stands unchanged otherwise).
