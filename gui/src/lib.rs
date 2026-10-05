@@ -99,6 +99,27 @@ pub fn in_place_refusal(source: &Path, dest: &Path) -> Option<String> {
     }
 }
 
+/// The profile env seam (the R2 semantics, the pure testable half):
+/// the trimmed `field` when non-empty, ELSE the trimmed `launch_env`
+/// when non-empty, ELSE `None` (= nothing to write to the env — the
+/// core's own probe order, `<cwd>/profiles` → `<exe-dir>/profiles`,
+/// stands untouched). The GUI process is the SOLE owner of the env
+/// seam (the selftest precedent — the process-global `set_var` before
+/// the job thread starts; the selftest sets the env itself, this fn
+/// is the `main.rs` path).
+pub fn profile_env_seam(field: &str, launch_env: &str) -> Option<String> {
+    let field = field.trim();
+    if !field.is_empty() {
+        return Some(field.to_string());
+    }
+    let launch_env = launch_env.trim();
+    if launch_env.is_empty() {
+        None
+    } else {
+        Some(launch_env.to_string())
+    }
+}
+
 /// The job's start transition (the worker thread's first step): the
 /// fields reset to the pre-clip baseline, `total` = the selected
 /// count.
@@ -487,8 +508,8 @@ pub fn selftest() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    // The four named lib tests (the pinned-wording surface — the
-    // suite prediction's N = 4).
+    // The five named lib tests (the pinned-wording surface — the
+    // suite prediction's N = 5).
     use super::*;
 
     // The process-global env seam (the `FRAMEPRISM_PROFILES` set by
@@ -556,6 +577,31 @@ mod tests {
         assert_eq!(in_place_refusal(&src, &src.join("absent-dest")), None);
         let _ = std::fs::remove_dir_all(&src);
         let _ = std::fs::remove_dir_all(&sibling);
+    }
+
+    #[test]
+    fn profile_seam_semantics() {
+        // The field wins over the launch env (the trim included).
+        assert_eq!(
+            profile_env_seam("  /x/profiles/a001.profile ", "/y/p.profile"),
+            Some("/x/profiles/a001.profile".to_string())
+        );
+        // The launch env falls through when the field is empty
+        // (the trim included).
+        assert_eq!(
+            profile_env_seam("", " /y/p.profile "),
+            Some("/y/p.profile".to_string())
+        );
+        // Both empty = None (the core's own probe order stands
+        // untouched).
+        assert_eq!(profile_env_seam("", ""), None);
+        // A whitespace-only field = empty: it falls through to the
+        // launch env, and whitespace-only on both sides = None.
+        assert_eq!(
+            profile_env_seam("   ", "/y/p.profile"),
+            Some("/y/p.profile".to_string())
+        );
+        assert_eq!(profile_env_seam("   ", "  "), None);
     }
 
     #[test]

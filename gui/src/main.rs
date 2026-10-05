@@ -7,10 +7,12 @@
 //! (the core exposes no live frame-level progress — the honest unit is
 //! the clip). No cancel (the job runs to completion — an honest
 //! absence, not a hidden one), no offload/verify/wipe verbs. The path
-//! fields are text-editable + the native folder pickers (the
+//! fields are text-editable + the native pickers (the
 //! `Browse…` buttons — the rfd sync pick: a pick REPLACES the field
 //! text, a cancel leaves it UNCHANGED — a cancel is not an error, no
-//! status line).
+//! status line). The profile field is the camera-identity seam (the
+//! `FRAMEPRISM_PROFILES` env — the probe order: the field → the
+//! launch env → the core's own `<cwd>/profiles` → `<exe-dir>/profiles`).
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -29,6 +31,10 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 struct App {
     source: String,
     dest: String,
+    profile: String,
+    /// `FRAMEPRISM_PROFILES` at the app launch, captured ONCE (the
+    /// seam's fall-through when the profile field is empty — R2).
+    launch_env: String,
     mode_label: String,
     rows: Vec<frameprism_gui::ClipRow>,
     checked: Vec<bool>,
@@ -45,6 +51,10 @@ impl App {
         Self {
             source: String::new(),
             dest: String::new(),
+            profile: String::new(),
+            // The launch value of the env seam (captured ONCE — the
+            // seam's fall-through when the field is empty; R2).
+            launch_env: std::env::var("FRAMEPRISM_PROFILES").unwrap_or_default(),
             mode_label: MODE_LOSSLESS.to_string(),
             rows: Vec::new(),
             checked: Vec::new(),
@@ -99,6 +109,29 @@ impl App {
         }
     }
 
+    /// The native FILE pick (the Profile row's `Browse…` button): the
+    /// rfd SYNC `pick_file` (the `do_browse` pattern generalized to
+    /// the file domain — the picker opens at the current field text
+    /// when it names an existing file (its parent dir) or an existing
+    /// dir). A pick REPLACES the field text; a cancel leaves it
+    /// UNCHANGED (no status line — a cancel is not an error, the
+    /// honest absence). An associated fn (the `do_browse` borrow
+    /// reason).
+    fn do_browse_file(field: &mut String) {
+        let mut picker = rfd::FileDialog::new();
+        let p = std::path::Path::new(field.as_str());
+        if p.is_file() {
+            if let Some(dir) = p.parent() {
+                picker = picker.set_directory(dir);
+            }
+        } else if p.is_dir() {
+            picker = picker.set_directory(field.as_str());
+        }
+        if let Some(path) = picker.pick_file() {
+            *field = path.to_string_lossy().into_owned();
+        }
+    }
+
     /// The encode job start (the pre-job refusals render as the NAMED
     /// line in the status row — never hidden; a started job owns the
     /// shared `JobState` the UI polls at ~4 Hz).
@@ -110,6 +143,17 @@ impl App {
                 return;
             }
         };
+        // The profile pre-job refusal (the fast honest path — the
+        // core's env seam accepts an explicit profile file ONLY, so a
+        // non-file field would be the core's per-clip `not a file`
+        // refusal, 14 empty dest dirs: the job does NOT start).
+        let profile = self.profile.trim();
+        if !profile.is_empty() && !std::path::Path::new(profile).is_file() {
+            self.status = format!(
+                "refusal: the profile is not a file (the core's env seam accepts an explicit profile file only): {profile}"
+            );
+            return;
+        }
         let keys: Vec<String> = self
             .rows
             .iter()
@@ -119,6 +163,15 @@ impl App {
             .collect();
         let src = std::path::Path::new(&self.source);
         let dst = std::path::Path::new(&self.dest);
+        // The env seam (the GUI process is the SOLE owner — the
+        // selftest precedent; the job thread reads the env it starts
+        // with). The invariant: the env AFTER do_start is EXACTLY the
+        // seam's effective value or absent (the None arm's remove is
+        // a harmless no-op that makes it explicit).
+        match frameprism_gui::profile_env_seam(&self.profile, &self.launch_env) {
+            Some(p) => std::env::set_var("FRAMEPRISM_PROFILES", p),
+            None => std::env::remove_var("FRAMEPRISM_PROFILES"),
+        }
         let state = Arc::new(Mutex::new(frameprism_gui::JobState::default()));
         match frameprism_gui::start_encode(src, dst, mode, &keys, state.clone()) {
             Ok(()) => {
@@ -171,7 +224,7 @@ impl eframe::App for App {
         }
     }
 
-    /// The UI (the utility shape — the six surface elements).
+    /// The UI (the utility shape — the seven surface elements).
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ui, |ui| {
             // (1) the source dir + the on-demand scan + the native
@@ -240,7 +293,25 @@ impl eframe::App for App {
                 }
             });
 
-            // (4) the start (disabled while a job runs — the pre-job
+            // (4) the profile (the camera-identity seam — optional;
+            // the field → the launch env → the core's own probe
+            // order; the Browse pick is the native FILE pick).
+            ui.horizontal(|ui| {
+                ui.label("Profile (optional)");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.profile)
+                        .hint_text("~/checkouts/frameprism/profiles/a001-sigma-fp.profile")
+                        .desired_width(420.0),
+                );
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse_file(&mut self.profile);
+                }
+            });
+            ui.weak(
+                "probe order: the field → the launch env (FRAMEPRISM_PROFILES) → <cwd>/profiles → <exe-dir>/profiles",
+            );
+
+            // (5) the start (disabled while a job runs — the pre-job
             // refusals land in the status row as the named line).
             ui.horizontal(|ui| {
                 let response = ui.add_enabled(!self.running, egui::Button::new("Start encode"));
@@ -250,7 +321,7 @@ impl eframe::App for App {
             });
             ui.separator();
 
-            // (5) the progress (the bar + the current clip key + the
+            // (6) the progress (the bar + the current clip key + the
             // running line; the verdict line + the dest path on
             // completion).
             if self.running {
@@ -284,7 +355,7 @@ impl eframe::App for App {
             ui.monospace(&self.status);
             ui.separator();
 
-            // (6) the static honesty note (the honest absence — there
+            // (7) the static honesty note (the honest absence — there
             // is NO cancel button; the core exposes no cancel handle).
             ui.weak(HONESTY_NOTE);
         });

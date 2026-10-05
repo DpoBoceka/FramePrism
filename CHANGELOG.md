@@ -12,12 +12,19 @@ All notable changes to frameprism.
   refusal, the run-to-completion job (no cancel) + the CLI verdict lines.
   The prebuilt `frameprism-gui-*` binaries ship per OS on the release
   page.
+- The Profile row (the camera-identity seam) — the optional profile
+  field + the native file pick (the rfd sync pick): the GUI process is
+  the sole owner of the `FRAMEPRISM_PROFILES` env (the field wins over
+  the launch env; both empty = the core's own `<cwd>/profiles` →
+  `<exe-dir>/profiles` probe order stands untouched); a non-file field
+  is the named pre-job refusal (the core's env seam accepts an
+  explicit profile file only — the job does not start).
 - The workspace root — the `Cargo.toml` + the `Cargo.lock` ride the
   repository root (the tool's lock moved; the tool's `--help` surface, the
   suite counts, and the oracle byte contracts stand unmodified under the
   move).
 - The gate — the gui step joins the check gate (the gui release build +
-  the 4-test lib suite + the headless selftest — the `gui selftest: OK
+  the 5-test lib suite + the headless selftest — the `gui selftest: OK
   (1/1 clips, rc=0, lossless)` line); the offline audit rides the
   workspace lock.
 - The release — the release workflow builds + publishes the

@@ -104,6 +104,14 @@ bytes are the CLI's), in a window. The current surface:
 - **Destination** — the output root (the CLI's positional `to` shape:
   one output clip dir per selected clip). An in-place destination (the
   destination inside the source) is the named refusal.
+- **Profile (optional)** — the camera-identity seam (the core's
+  `FRAMEPRISM_PROFILES` resolution seam): a profile file field + a
+  native file `Browse…` pick (the rfd sync pick: a pick replaces the
+  field text, a cancel leaves it unchanged). The probe order: the
+  field → the launch env (`FRAMEPRISM_PROFILES` when the app was
+  started with it) → `<cwd>/profiles` → `<exe-dir>/profiles`. A
+  non-file field is the named pre-job refusal (the core's env seam
+  accepts an explicit profile file only — the job does not start).
 - **The job** — Start encode runs the selected clips to completion
   (one job thread; a failed clip is named in the job state and the
   remaining clips continue). The job runs to completion — no cancel in
@@ -121,7 +129,7 @@ The selftest is the headless proof (no window / GPU): it encodes the
 committed one-frame fixture clip end-to-end (the committed profile via
 the `FRAMEPRISM_PROFILES` resolution) and prints
 `gui selftest: OK (1/1 clips, rc=0, lossless)` on success. The gate
-runs it in CI (the gui gate step: the release build + the 4-test lib
+runs it in CI (the gui gate step: the release build + the 5-test lib
 suite + the selftest).
 
 Known limits (the desktop app's):

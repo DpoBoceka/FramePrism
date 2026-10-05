@@ -243,9 +243,10 @@ fi
 
 # --- step 11: gui app (the desktop app's gate step) ------------------------
 # The gui workspace member (frameprism-gui): the release build of the
-# app binary + the lib suite gate (4/0/0 — the named-wording tests:
-# the arbiter map/refusal, the in-place guard, the headless encode
-# selftest, the job-state transitions) + the headless selftest run
+# app binary + the lib suite gate (5/0/0 — the named-wording tests:
+# the arbiter map/refusal, the in-place guard, the profile-seam
+# semantics, the headless encode selftest, the job-state transitions)
+# + the headless selftest run
 # (NO window / GPU — the lib path only; the committed fixture's
 # one-frame encode; the VERBATIM OK line is the pinned-wording
 # teeth). Silent on PASS (the summary token carries it); every
@@ -257,9 +258,9 @@ fi
 GUI_SUITE_LOG="$(cargo test --release --lib -p frameprism-gui 2>&1)"
 GUI_SUITE_LINE="$(printf '%s\n' "$GUI_SUITE_LOG" | grep 'test result' | tail -1)"
 case "$GUI_SUITE_LINE" in
-  ""*"4 passed; 0 failed; 0 ignored"*) ;;
+  ""*"5 passed; 0 failed; 0 ignored"*) ;;
   *)
-    echo "FAIL ci check: the gui app step — the lib suite gate drift — expected '4 passed; 0 failed; 0 ignored', got: ${GUI_SUITE_LINE:-'(no test result line — build/test error, log tail below)'}"
+    echo "FAIL ci check: the gui app step — the lib suite gate drift — expected '5 passed; 0 failed; 0 ignored', got: ${GUI_SUITE_LINE:-'(no test result line — build/test error, log tail below)'}"
     printf '%s\n' "$GUI_SUITE_LOG" | tail -5
     exit 1 ;;
 esac
