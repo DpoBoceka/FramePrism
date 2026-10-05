@@ -2558,4 +2558,43 @@ geometry: 3024 2010 8 archive
         clear_unpinned_mode_for_tests();
         assert!(!effective_verify(false), "the cleared slot: the pinned shape stands");
     }
+
+    /// The verify contract's INESCAPABILITY (the arc B L2 — R2):
+    /// the unpinned run's effective verify is ON regardless of the
+    /// flag state, and the CLI surface exposes NO way to request
+    /// verify off (`--verify` is the only verify flag — the opt-in;
+    /// no `--no-verify` exists — the flag surface is L3's territory,
+    /// untouched in L2: the `--help` surface is byte-identical). The
+    /// guard has no off switch: the `--no-verify` refusal line (the
+    /// contract line: `refusal: --no-verify is refused for an
+    /// unpinned encode (the round-trip verify is the unpinned
+    /// output's only falsifiability — the guard is not escapable)`)
+    /// is CONTRACT-RESERVED — it lands with the flag in L3's surface
+    /// ruling (the named residual — no flag is invented in L2). This
+    /// KAT pins the inescapability's observable: flag OFF + unpinned
+    /// = effective verify ON (the guard's only state), and the force
+    /// is the UNPINNED mode's — never a default (the pinned path =
+    /// the flag's value, byte-identical — no derived verify).
+    #[test]
+    fn verify_contract_unpinned_inescapable() {
+        let _g = UNPINNED_SLOT_LOCK.lock().expect("slot lock");
+        clear_unpinned_mode_for_tests();
+        set_unpinned_mode(UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        });
+        assert!(
+            effective_verify(false),
+            "the unpinned run: flag OFF → effective verify ON (the guard has no off switch — the CLI surface exposes no verify-off request; the --no-verify refusal is contract-reserved for L3's flag)"
+        );
+        assert!(
+            effective_verify(true),
+            "the unpinned run: flag ON → effective verify ON (the flag is the opt-in; the unpinned force is the floor)"
+        );
+        clear_unpinned_mode_for_tests();
+        assert!(
+            !effective_verify(false),
+            "the pinned run (the slot absent): the flag's value (off) — the force is the UNPINNED mode's, never a default (no derived verify — the strict posture stands where the mode stands)"
+        );
+    }
 }

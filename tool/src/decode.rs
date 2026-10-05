@@ -3589,6 +3589,94 @@ mod tests {
         b
     }
 
+    /// A synthetic little-endian fp-camera DNG container WITH the
+    /// camera identity + the TimeCodes (the arc B L2 — the M3 smoke's
+    /// fixture source): the `synth_dng_fp`'s tile-blob + tail-IFD
+    /// shape, plus the Make/Model (tags 271/272, ASCII out-of-line —
+    /// the self-description the unpinned pre-pass's `identity_from_
+    /// ifd0` reads + the committed profile's match) + the TimeCodes
+    /// (tag 51043, 8 BCD bytes — the ingest gate's TC continuity),
+    /// and tag 259 as the in-line SHORT count-1 compression 7 (the
+    /// `fp_transcode_source` synthesis's precondition — the measured
+    /// camera's shape; the `synth_dng_fp`'s LONG 259 is the
+    /// decode/eligibility KATs' shape only). The `tiles` are the
+    /// caller's (the drill-clean or the whole-body-divergent class).
+    fn synth_dng_fp_identified(
+        frame_w: u32,
+        frame_h: u32,
+        tw: u32,
+        th: u32,
+        bps: u32,
+        make: &str,
+        model: &str,
+        tc: [u8; 8],
+        tiles: &[Vec<u8>],
+    ) -> Vec<u8> {
+        let n = tiles.len();
+        let make_b = format!("{make}\0").into_bytes();
+        let model_b = format!("{model}\0").into_bytes();
+        let blob_len: u64 = tiles.iter().map(|t| t.len() as u64).sum();
+        let ifd_size: u64 = 2 + 13 * 12 + 4; // 13 entries + the next-IFD pointer
+        let header_len: u64 = 8;
+        let ifd_off = header_len + blob_len;
+        // The out-of-line data (after the IFD, in emission order):
+        let make_off = ifd_off + ifd_size;
+        let model_off = make_off + make_b.len() as u64;
+        let o324_off = model_off + model_b.len() as u64;
+        let o325_off = o324_off + (n as u64) * 4;
+        let tc_off = o325_off + (n as u64) * 4;
+        // The contiguous tile offsets (the blob starts at the header's end).
+        let mut offs = Vec::with_capacity(n);
+        let mut cursor = header_len;
+        for t in tiles {
+            offs.push(cursor);
+            cursor += t.len() as u64;
+        }
+        let mut b = Vec::new();
+        // The header: "II*\0" + the IFD0 offset (the tail — the R2 shape).
+        b.extend_from_slice(b"II*\0");
+        b.extend_from_slice(&(ifd_off as u32).to_le_bytes());
+        // The tile blob (contiguous).
+        for t in tiles {
+            b.extend_from_slice(t);
+        }
+        // The IFD0: the count + the 13 entries (ascending tag order —
+        // the TIFF contract) + the next-IFD pointer (0 — the single-IFD
+        // fp layout, the synthesis's precondition).
+        b.extend_from_slice(&13u16.to_le_bytes());
+        let emit = |b: &mut Vec<u8>, tag: u16, typ: u16, count: u32, val: u32| {
+            b.extend_from_slice(&tag.to_le_bytes());
+            b.extend_from_slice(&typ.to_le_bytes());
+            b.extend_from_slice(&count.to_le_bytes());
+            b.extend_from_slice(&val.to_le_bytes());
+        };
+        emit(&mut b, 256, 4, 1, frame_w);
+        emit(&mut b, 257, 4, 1, frame_h);
+        emit(&mut b, 258, 4, 1, bps);
+        emit(&mut b, 259, 3, 1, 7); // Compression = SHORT count-1 (the measured shape)
+        emit(&mut b, 262, 4, 1, 32803); // Photometric = CFA
+        emit(&mut b, 271, 2, make_b.len() as u32, make_off as u32);
+        emit(&mut b, 272, 2, model_b.len() as u32, model_off as u32);
+        emit(&mut b, 277, 4, 1, 1); // SamplesPerPixel
+        emit(&mut b, 322, 4, 1, tw); // TileWidth
+        emit(&mut b, 323, 4, 1, th); // TileLength
+        emit(&mut b, 324, 4, n as u32, o324_off as u32); // TileOffsets (out-of-line)
+        emit(&mut b, 325, 4, n as u32, o325_off as u32); // TileByteCounts (out-of-line)
+        emit(&mut b, 51043, 1, 8, tc_off as u32); // TimeCodes (out-of-line)
+        b.extend_from_slice(&0u32.to_le_bytes()); // the next-IFD pointer
+        // The out-of-line data: the identity + the tile arrays + the TC.
+        b.extend_from_slice(&make_b);
+        b.extend_from_slice(&model_b);
+        for o in &offs {
+            b.extend_from_slice(&(*o as u32).to_le_bytes());
+        }
+        for t in tiles {
+            b.extend_from_slice(&(t.len() as u32).to_le_bytes());
+        }
+        b.extend_from_slice(&tc);
+        b
+    }
+
     /// A deterministic 512×368 u16 plane (phase-stratified Bayer-like +
     /// per-pixel jitter, 12-bit) — the camera-free test ground truth for
     /// the full-nominal round-trip.
@@ -4057,6 +4145,169 @@ mod tests {
                 ("A001_013_20260930_000395.DNG".to_string(), 44),
             ],
             "the whole-body refusals are EXACTLY the three disputed tiles (f277 tile 44, f287 tile 5, f395 tile 44) — the no-ctx drill's temporal-oracle class"
+        );
+    }
+
+    // =====================================================================
+    // The arc B L2 (the unpinned encode semantics) KATs — the temporal
+    // strict line + the M3 smoke's synthetic fp fixtures. The house's
+    // determinism ruling: the PURE functions (the drill's decision
+    // surface + the fixture synthesizer), not `process_dir` (the
+    // process-global test-override slot's sibling-test race); the
+    // end-to-end proofs are the M3 CLI smokes (from disk).
+    // =====================================================================
+
+    /// The temporal STRICT LINE (the arc B L2 — R1, contractual):
+    /// the whole-body-divergent tile in the UNPINNED state (the class
+    /// absent — the unpinned encode never sets the temporal-oracle
+    /// ctx: its `frame_classes` map stays EMPTY BY DESIGN, so the fp
+    /// transcode path's caller clears the slot explicitly — the
+    /// no-ctx default) = the EXISTING named refusal, BYTE-IDENTICAL
+    /// to the pinned path's wording (no new line — the strict line
+    /// REUSES the existing class's refusal; the M0's binding decision
+    /// point stands: the unpinned path cannot reach the acceptance
+    /// through any derived ctx — the class is the profile's only; no
+    /// guessed class, no default bound). Synthetic + corpus-free (the
+    /// house's pure-fn KAT pattern — `decode_j92_frame`'s pure
+    /// decision surface over the deterministic prefix-flip class: the
+    /// divergent tail ≫ 2 bytes = the whole-body class).
+    #[test]
+    fn kat_fp_temporal_strict_line_unpinned() {
+        // The unpinned state: the thread-local oracle slot is
+        // EXPLICITLY absent (the no-ctx the unpinned encode leaves —
+        // nothing is derived; the strict drill stands). The slot is
+        // per test thread (the thread-local contract — the parallel
+        // KATs cannot cross-set it); the clear before + after is the
+        // KAT hygiene (the slot never leaks into a sibling test's
+        // thread).
+        set_fp_temporal_oracle(None);
+        let plane = fp_test_plane(512, 368);
+        let full_rect = tileenc::TileRect { x0: 0, y0: 0, tw: 512, tl: 368 };
+        let planes =
+            tileenc::planes_from_tile_rows(&plane, &full_rect, 368, tileenc::Orient::Natural)
+                .unwrap();
+        let good_tile = tileenc::encode_tile_planes(&planes, 12, 1).unwrap();
+        let mut bad_tile = good_tile.clone();
+        bad_tile[12] ^= 0x01; // the 1-bit prefix flip (the whole-body class — the divergent tail ≫ 2 bytes)
+        let mut tiles: Vec<Vec<u8>> = Vec::with_capacity(48);
+        tiles.push(bad_tile); // tile 0 = the whole-body-divergent tile
+        for _ in 0..47 {
+            tiles.push(good_tile.clone()); // the other 47 tiles = good (strict by construction)
+        }
+        let synth = synth_dng_fp(3856, 2170, 512, 368, 12, &tiles, 0);
+        let err = decode_j92_frame(&synth, "unpinned-strict")
+            .err()
+            .expect("the whole-body-divergent tile with no ctx must refuse (the strict line)");
+        assert_eq!(
+            err.to_string(),
+            "unpinned-strict: tile (0,0): fp-camera tile prefix mismatch (the stored tile differs from the Natural-PSV1 re-encode OUTSIDE the measured bounded tail — the final data byte + its stuffing / the even-size 0x00 pad / the post-EOI 0x00 pad; a flip in the header or entropy prefix = corrupt stream; the fp bounded-tail restore-drill integrity check, the bounded-tail contract)",
+            "the unpinned no-ctx refusal is the EXISTING named line, BYTE-IDENTICAL (the strict line reuses the class's refusal — never a new one): {err}"
+        );
+        set_fp_temporal_oracle(None);
+    }
+
+    /// The M3 smoke's synthetic fp fixture (the arc B L2 — R1/R3):
+    /// the materializer writes the deterministic DIVERGENT fp frame
+    /// the from-disk refusal re-confirmation consumes (the 1-frame
+    /// clip — frame 1, TimeCodes FF=0x00; the whole-body-divergent
+    /// tile 0). The M0 mapping (recorded in the run's progress.md):
+    /// NO committed fp-camera frame exists in the repo (every
+    /// committed .DNG is raw- or archive-class), and the transcode's
+    /// source-synthesis seam assumes the measured A001 container
+    /// shape (the 59-entry IFD0 — the synthesis's 58-entry synthetic
+    /// table constant), so a minimal synthetic frame rides the
+    /// DECODE/drill path (this fixture's refusal fires inside
+    /// `decode_j92_frame` — the transcode arm's FIRST call — before
+    /// the synthesis seam) but NOT the transcode encode path: the
+    /// clip-level A/B consumes the REAL mixed clip from disk when
+    /// present (the corpus-conditional addendum — the house skip
+    /// pattern; the committed code + this fixture + the pure-fn KATs
+    /// stand corpus-free). The assertions pin the fixture's semantic
+    /// contract: the `FpCameraLossless` class (the transcode routing),
+    /// the self-described identity (the unpinned pre-pass's read +
+    /// the committed profile's match), and the drill class (tile 0
+    /// refuses NAMED — the whole-body class, the strict line's smoke
+    /// side).
+    #[test]
+    fn kat_l2_smoke_fixture_materialize() {
+        let base = std::path::Path::new("/tmp/item134-ab");
+        let _ = std::fs::remove_dir_all(base);
+        let refusal = base.join("refusal");
+        std::fs::create_dir_all(&refusal).unwrap();
+        // The deterministic tile content (the camera-free ground
+        // truth — the Natural-PSV1 re-encode = strict by
+        // construction; the prefix flip = the whole-body class). The
+        // plane is HIGH-ENTROPY (a seeded splitmix64 over the pixel
+        // index — the synthetic sensor noise): the tile streams land
+        // at the camera's per-tile class, so the tail-IFD offset
+        // lands beyond the 1 MiB detection prefix — the fp camera's
+        // measured tail shape (~4.4 MB — the sanctioned BadIfdOffset
+        // full-file fallback fires, as on the real frames; a
+        // low-entropy plane compresses the blob under the prefix and
+        // leaves the identity's out-of-line values in the in-window
+        // gap class — the named refusal, the pre-record behavior).
+        let plane: Vec<u16> = (0..(512 * 368)).map(|i| {
+            let mut x = (i as u64)
+                .wrapping_mul(0x9E3779B97F4A7C15)
+                .wrapping_add(0xD1B54A32D192ED03);
+            x ^= x >> 30;
+            x = x.wrapping_mul(0xBF58476D1CE4E5B9);
+            x ^= x >> 27;
+            x ^= x >> 31;
+            (x & 0x0FFF) as u16
+        })
+        .collect();
+        let full_rect = tileenc::TileRect { x0: 0, y0: 0, tw: 512, tl: 368 };
+        let planes =
+            tileenc::planes_from_tile_rows(&plane, &full_rect, 368, tileenc::Orient::Natural)
+                .unwrap();
+        let good_tile = tileenc::encode_tile_planes(&planes, 12, 1).unwrap();
+        let mut bad_tile = good_tile.clone();
+        bad_tile[12] ^= 0x01;
+        let make = "SIGMA";
+        let model = "SIGMA fp";
+        let mut divergent_tiles = vec![good_tile.clone(); 48];
+        divergent_tiles[0] = bad_tile;
+        let divergent = synth_dng_fp_identified(
+            3856, 2170, 512, 368, 12, make, model, [0x00, 0, 0, 0, 0, 0, 0, 0], &divergent_tiles,
+        );
+        let div_path = refusal.join("FPTEST_012_20000101_000001.DNG");
+        std::fs::write(&div_path, &divergent).unwrap();
+        // The semantic contract: the class (the transcode routing) +
+        // the self-described identity (the unpinned pre-pass's read +
+        // the committed profile's Make/Model + geometry match) + the
+        // drill class (tile 0 refuses NAMED — the whole-body class).
+        {
+            let meta = tiff::read_meta(&divergent)
+                .unwrap_or_else(|e| panic!("divergent: the synthetic fp frame parses: {e}"));
+            assert_eq!(
+                crate::frameclass::classify(&meta),
+                crate::frameclass::FrameClass::FpCameraLossless,
+                "divergent: the fixture classifies the fp-camera class (the transcode routing — the measured fingerprint)"
+            );
+            let ident = crate::camera::identity_from_ifd0(&meta.ifd0, &divergent)
+                .unwrap_or_else(|e| panic!("divergent: the self-described identity reads: {e}"));
+            assert_eq!(
+                (
+                    ident.make.as_str(),
+                    ident.model.as_str(),
+                    ident.width,
+                    ident.height,
+                    ident.bits_per_sample
+                ),
+                ("SIGMA", "SIGMA fp", 3856, 2170, 12),
+                "divergent: the identity = the committed profile's camera (the pinned run's match + the unpinned run's self-description)"
+            );
+        }
+        let grid = tileenc::Grid::for_dims(3856, 2170, 512, 368);
+        let derr = fp_verify_tile_full_nominal(
+            &divergent_tiles[0], 512, 368, &grid, 0, 0, 12, "div-tile0",
+        )
+        .err()
+        .expect("the divergent fixture's tile 0 must refuse (the whole-body class)");
+        assert!(
+            derr.to_string().contains("fp-camera tile prefix mismatch"),
+            "the divergent fixture's tile 0 fires the NAMED whole-body refusal: {derr}"
         );
     }
 }

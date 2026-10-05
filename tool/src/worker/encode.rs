@@ -2946,6 +2946,74 @@ mod tests {
         );
     }
 
+    /// The unpinned run's routing decisions (the arc B L2 — R3): the
+    /// routing is the predicates' — the pure decision chain (the
+    /// identity's structure → the class → the policy verdict) never
+    /// consults the profile (absent in the unpinned run), so the
+    /// unpinned frame routes to the SAME existing paths as the
+    /// pinned one: the RAW identity → the raw path (the `Encode`
+    /// verdict — the bit-exact round-trip encode, byte-identical to
+    /// the pinned raw path — the L1 A/B's frame level pinned here at
+    /// the decision's pure-fn level), the FP identity → the
+    /// transcode path (the `Transcode` verdict — the full round-
+    /// trip: the default path's decode contract + the transcode
+    /// fidelity check, which run regardless of the verify flag — the
+    /// L24 note — + the L1 seam's forced verify; the temporal-oracle
+    /// ctx is the profile's — absent unpinned, the strict drill
+    /// stands — the R1 strict line's routing side).
+    #[test]
+    fn kat_unpinned_routing_decisions() {
+        use crate::frameclass as fc;
+        // The raw identity (the stock raw structure — compression 1,
+        // strip layout, the UHD-12 geometry): classifies the raw
+        // class → the `Encode` verdict (the raw path — carry-
+        // invariant, byte-identical to the pinned raw path).
+        let raw = fc::FrameStructure {
+            compression: Some(1),
+            width: Some(3856),
+            height: Some(2170),
+            bits_per_sample: Some(12),
+            tile_width: None,
+            tile_height: None,
+            tile_count: None,
+            tiled: false,
+        };
+        assert_eq!(
+            fc::classify_structure(&raw),
+            fc::FrameClass::RawUncompressed,
+            "the raw identity classifies the raw class (the classifier's compression-1/strip arm)"
+        );
+        assert_eq!(
+            policy(fc::FrameClass::RawUncompressed, Mode::Lossless, false, false),
+            FramePolicy::Encode,
+            "the raw identity routes the raw path (the Encode verdict — the profile never enters the chain; the routing is the predicates')"
+        );
+        // The fp identity (the measured fingerprint — compression 7,
+        // the 512×368 × 48 tile structure on 3856×2170 @ 12-bit):
+        // classifies the fp class → the `Transcode` verdict (the
+        // default — the carry opt-in OFF; the full round-trip).
+        let fp = fc::FrameStructure {
+            compression: Some(7),
+            width: Some(3856),
+            height: Some(2170),
+            bits_per_sample: Some(12),
+            tile_width: Some(512),
+            tile_height: Some(368),
+            tile_count: Some(48),
+            tiled: true,
+        };
+        assert_eq!(
+            fc::classify_structure(&fp),
+            fc::FrameClass::FpCameraLossless,
+            "the fp identity classifies the fp-camera class (the measured fingerprint — zero-drift)"
+        );
+        assert_eq!(
+            policy(fc::FrameClass::FpCameraLossless, Mode::Lossless, false, false),
+            FramePolicy::Transcode,
+            "the fp identity routes the transcode path (the Transcode verdict — the full round-trip; the temporal ctx stays absent unpinned — the strict drill stands)"
+        );
+    }
+
     /// The Open Gate 2K grid geometry (the `tileenc` surface,
     /// test 6b): `Grid::new(2016, 1344)` = a 5×5 grid
     /// over the 482×272 tiles, BOTH edges clipped (2016 = 4·482 + 88 →
