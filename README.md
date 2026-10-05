@@ -55,7 +55,7 @@ downscale2x 17.12:1.
 ## Platforms and cameras
 
 - **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works on all three platforms with the host-prefix setup (the Quick start).
-- **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
+- **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. A matching camera profile carries the full contract (the frozen per-camera oracle class + the measured acceptance bounds); without one, frames that self-describe and confirm still encode (the unpinned mode — the CLI section below), and frames the tool cannot identify or confirm are a named refusal, not a guess (docs/camera-profiles.md).
 - **Distribution:** the source (this repository) + the prebuilt release binaries (the Downloads). No `cargo install`, crates.io package, or Homebrew package.
 
 ## Downloads
@@ -69,7 +69,16 @@ The desktop app binaries (`frameprism-gui-*`) ship on the same release page (the
 ## CLI
 
 `frameprism --help` is the single source of truth for the flag semantics (the design notes
-live in `docs/cli.md`). The current surface, straight from the binary:
+live in `docs/cli.md`).
+
+Camera profiles (`profiles/` — `docs/camera-profiles.md`) are the promotion to the full
+contract, not the gate: a matching profile carries the frozen per-camera oracle class, the
+measured acceptance bounds, and the cross-version byte contract. Without one, self-described
+frames (a readable camera identity + a confirmed layout) still encode — announced at start,
+verified on the round-trip per frame, no temporal acceptance; what the tool cannot identify
+or confirm is a named refusal. `--pinned-only` = the strict posture (the no-profile run is the named refusal instead of the unpinned encode).
+
+The current surface, straight from the binary:
 
 <!-- frameprism-help-commands:begin — regenerate from the built binary's frameprism --help; the ci/check.sh drift gate byte-diffs this block; do not edit by hand -->
 ```

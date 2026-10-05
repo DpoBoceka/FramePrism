@@ -679,6 +679,12 @@ fn main() -> ExitCode {
     // grids it is accepted-but-inert by construction, the ds2x rows
     // keep the trial default).
     frameprism::worker::set_trial_flag(cli.trial);
+    // The `--pinned-only` NAMED opt-in (the strict posture — the
+    // unpinned fallback's refusal: the encode gate's UNPINNED entry
+    // reads it; absent = the default-off unpinned fallback stands;
+    // the PINNED path never reads it — a pin present + matching =
+    // unchanged).
+    frameprism::camera::set_pinned_only(cli.pinned_only);
     if matches!(cli.codec, CodecArg::J92 | CodecArg::Both) {
         let _ = frameprism::status::open();
     }
@@ -1067,5 +1073,26 @@ mod tests {
                 "{name}: blocklist `DIT` (word-boundary) matched — reword the text, never this test"
             );
         }
+    }
+
+    /// The `--pinned-only` help line (the L3 surface — R1): the
+    /// rendered `--help`'s Options section carries the flag's line
+    /// VERBATIM (the house one-line flag-description idiom — the KAT
+    /// pins it; the lane's before/after sha pair proves the `--help`
+    /// surface changes EXACTLY by this line). The parse proof (the
+    /// H2 idiom — the parse level only): default off, the flag parses
+    /// on.
+    #[test]
+    fn encode_help_pins_the_pinned_only_flag_line() {
+        use clap::CommandFactory;
+        let help = Cli::command().render_long_help().to_string();
+        assert!(
+            help.contains("      --pinned-only\n          Strict posture: refuse the unpinned fallback (the self-described encode) — when no camera profile resolves and the frames would otherwise encode unpinned, the run is the named refusal (rc=2 before any frame). Absent (default) = the unpinned fallback stands; a pin present + matching = the PINNED path, unchanged (the flag is inert)"),
+            "the rendered --pinned-only help line (verbatim — the doc comment's rendering)"
+        );
+        let parsed = Cli::try_parse_from(["frameprism"]).unwrap();
+        assert!(!parsed.pinned_only, "default off — the unpinned fallback stands");
+        let parsed = Cli::try_parse_from(["frameprism", "--pinned-only"]).unwrap();
+        assert!(parsed.pinned_only, "the strict posture is ON");
     }
 }

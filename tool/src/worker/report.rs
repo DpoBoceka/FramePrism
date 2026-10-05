@@ -229,8 +229,14 @@ pub fn process_dir(
         match crate::camera::resolve_profiles() {
             Ok(set) => (Some(set), None),
             Err(err) if err.contains(crate::camera::UNRESOLVABLE_PROBED) => {
-                let mode = unpinned_prepass(&frames)?;
-                (None, Some(mode))
+                // The `--pinned-only` strict posture (the arc B L3 —
+                // R1): the refusal branch rides the UNPINNED entry
+                // itself (the pure `unpinned_entry` — the prepass's
+                // result + the flag's state; the UNDETERMINED arms
+                // propagate BEFORE the refusal — UNCHANGED under the
+                // flag; the PINNED arm above never reads the flag —
+                // it is inert by construction).
+                (None, unpinned_entry(&frames)?)
             }
             Err(err) => {
                 return Err(anyhow::anyhow!(
@@ -1369,6 +1375,34 @@ pub(crate) fn unpinned_prepass(
     Ok(crate::camera::UnpinnedMode { identity, predicate })
 }
 
+/// The unpinned entry's decision (the arc B L3 — R1, the
+/// `--pinned-only` refusal branch at the L1 gate's UNPINNED entry):
+/// the prepass's result + the flag's state → the mode or the named
+/// refusal. The flag ON + the frames WOULD enter the UNPINNED mode
+/// (the prepass confirmed — the file self-describes + a predicate
+/// holds) = the NAMED refusal (`camera::PINNED_ONLY_REFUSAL` — the
+/// verbatim line the KATs pin), rc=2 BEFORE any frame (the pre-job
+/// class — the refusal fires at the gate, the L1 site; nothing is
+/// written, the frames are not touched). The flag OFF = the mode
+/// (the L1/L2 default behavior — the unpinned fallback stands). A pin
+/// present + matching = the PINNED path, UNCHANGED (the flag is inert
+/// — this helper is the unresolvable class's arm ONLY, the pinned arm
+/// never calls it); the UNDETERMINED arms = the existing named lines,
+/// UNCHANGED (the prepass's Err propagates before the refusal). Pure
+/// — the KATs drive it directly (the house determinism ruling: the
+/// `process_dir` integration rides the same call, but `process_dir`
+///'s `resolve_profiles` reads the process-wide test-override slot —
+/// the sibling-test race the L1 KATs' record names).
+pub(crate) fn unpinned_entry(
+    frames: &[(PathBuf, PathBuf)],
+) -> Result<Option<crate::camera::UnpinnedMode>> {
+    let mode = unpinned_prepass(frames)?;
+    if crate::camera::pinned_only() {
+        return Err(anyhow::anyhow!(crate::camera::PINNED_ONLY_REFUSAL));
+    }
+    Ok(Some(mode))
+}
+
 /// Collect frames (`.dng`) + sidecars (everything else) under `base`,
 /// mirroring the subfolder layout into `output_root`.
 /// symlinked entries are skipped and every descended-into directory is
@@ -2472,6 +2506,146 @@ mod tests {
         assert!(format!("{err:?}").contains(
             "refusal: camera SIGMA SIGMA fp 1024x768 @12-bit is self-described but no tile/archive layout confirms"
         ));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The `--pinned-only` refusal at the gate's UNPINNED entry (the
+    /// L3 contract — R1): the flag ON + no pin resolves + the frames
+    /// WOULD enter the UNPINNED mode (the prepass confirms — the L1
+    /// KAT's fixture idiom: the self-described frame the shipped
+    /// predicate holds against) → the NAMED refusal, the verbatim
+    /// line (the KAT pins it), rc=2 before any frame (the pre-job
+    /// class — the refusal fires at the gate: nothing is written, the
+    /// frames are not touched).
+    #[test]
+    fn unpinned_entry_refuses_named_when_pinned_only_is_on() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let base = std::env::temp_dir().join(format!("frameprism-pinned-only-refusal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let f = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(
+            &f,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let frames = vec![(f, base.join("out/f1.DNG"))];
+        crate::camera::set_pinned_only(true);
+        let err = unpinned_entry(&frames).unwrap_err();
+        assert_eq!(
+            format!("{err:?}"),
+            crate::camera::PINNED_ONLY_REFUSAL,
+            "the verbatim refusal line (the strict posture)"
+        );
+        crate::camera::set_pinned_only(false); // the reset for the sibling KATs
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The default-OFF regression at the gate's UNPINNED entry (the
+    /// L3 contract — R1): without the flag, the entry proceeds EXACTLY
+    /// as the L1/L2 head — the prepass confirms → the UNPINNED mode
+    /// (the unpinned fallback stands: the ANNOUNCE + the verify force
+    /// ride the existing mode surface, untouched by this lane).
+    #[test]
+    fn unpinned_entry_proceeds_when_pinned_only_is_off() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let base = std::env::temp_dir().join(format!("frameprism-pinned-only-off-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let f = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(
+            &f,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let frames = vec![(f, base.join("out/f1.DNG"))];
+        crate::camera::set_pinned_only(false);
+        let mode = unpinned_entry(&frames)
+            .expect("the flag OFF: the unpinned entry proceeds")
+            .expect("the confirmed frames → the UNPINNED mode (the L1/L2 default)");
+        assert_eq!(mode.predicate, crate::camera::PRED_TILE, "the first frame's confirming predicate");
+        assert_eq!(mode.identity.make, "SIGMA");
+        assert_eq!(mode.identity.model, "SIGMA fp");
+        assert_eq!((mode.identity.width, mode.identity.height, mode.identity.bits_per_sample), (3856, 2170, 12));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The pinned-path inertness (the L3 contract — R1): a pin present
+    /// + resolvable = the PINNED path — the flag is INERT (the flag's
+    /// only site is the unresolvable class's arm, the unpinned entry;
+    /// the pinned arm never reads it). The pure-level observable: the
+    /// resolution is IDENTICAL with the flag ON and OFF (the committed
+    /// A001 profile's dir — the testutil's idiom); the gate's oracles
+    /// pin the bytes.
+    #[test]
+    fn pinned_only_flag_is_inert_on_the_pinned_path() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let base = std::env::temp_dir().join(format!("frameprism-pinned-only-inert-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("cwd/profiles")).unwrap();
+        std::fs::create_dir_all(base.join("exe")).unwrap();
+        std::fs::write(
+            base.join("cwd/profiles/a001-sigma-fp.profile"),
+            std::fs::read("../profiles/a001-sigma-fp.profile")
+                .expect("the committed A001 profile (the testutil's idiom)"),
+        )
+        .unwrap();
+        crate::camera::set_pinned_only(false);
+        let without = crate::camera::resolve_core(None, &base.join("cwd"), &base.join("exe"))
+            .expect("the resolvable set (the flag OFF)");
+        crate::camera::set_pinned_only(true);
+        let with = crate::camera::resolve_core(None, &base.join("cwd"), &base.join("exe"))
+            .expect("the resolvable set (the flag ON — the pinned arm never reads the flag)");
+        crate::camera::set_pinned_only(false); // the reset for the sibling KATs
+        assert_eq!(with.source, without.source, "the resolution's source is flag-invariant");
+        assert_eq!(with.profiles.len(), without.profiles.len(), "the resolution's set is flag-invariant");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The UNDETERMINED arms under the flag (the L3 contract — R1):
+    /// the EXISTING lines, UNCHANGED (the prepass's Err propagates
+    /// BEFORE the refusal — the arm's wording already says "and no
+    /// pin" — accurate under the flag; the L1 KATs pin the lines,
+    /// this KAT pins the under-flag invariance).
+    #[test]
+    fn unpinned_entry_arms_unchanged_under_pinned_only() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        let base = std::env::temp_dir().join(format!("frameprism-pinned-only-arms-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        crate::camera::set_pinned_only(true);
+        // arm 1: the no-identity frame (the L1 KAT's fixture — the
+        // testutil's minimal DNG, the identity tags ABSENT).
+        let f1 = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(&f1, crate::worker::testutil::synthetic_dng(Some(&[0u8; 8]), 1, 8, None)).unwrap();
+        let err = unpinned_entry(&vec![(f1, base.join("out/f1.DNG"))]).unwrap_err();
+        assert_eq!(
+            format!("{err:?}"),
+            crate::camera::UNDETERMINED_ARM1,
+            "the verbatim arm-1 line, UNCHANGED under the flag"
+        );
+        // arm 2: the self-described but unconfirmed geometry (the L1
+        // KAT's fixture — 1024×768 @12, neither layout).
+        let f2 = base.join("A001_001_20260101_000002.DNG");
+        std::fs::write(
+            &f2,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 1024, 768, 12, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let err = unpinned_entry(&vec![(f2, base.join("out/f2.DNG"))]).unwrap_err();
+        assert_eq!(
+            format!("{err:?}"),
+            crate::camera::undetermined_arm2_line(&crate::camera::FrameIdentity {
+                make: "SIGMA".into(),
+                model: "SIGMA fp".into(),
+                width: 1024,
+                height: 768,
+                bits_per_sample: 12,
+                photometric: 32803,
+            }),
+            "the verbatim arm-2 line, UNCHANGED under the flag"
+        );
+        crate::camera::set_pinned_only(false); // the reset for the sibling KATs
         let _ = std::fs::remove_dir_all(&base);
     }
 }

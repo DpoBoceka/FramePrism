@@ -761,6 +761,18 @@ pub fn undetermined_arm2_line(ident: &FrameIdentity) -> String {
     )
 }
 
+/// The `--pinned-only` NAMED refusal (the L3 contract — verbatim, the
+/// tests pin it): the strict posture is ON + no pin resolves + the
+/// frames WOULD enter the UNPINNED mode (the file self-describes + a
+/// predicate confirms — the L1 gate's entry point) → the named rc=2
+/// BEFORE any frame (the pre-job class — the refusal fires at the
+/// gate; nothing is written, the frames are not touched). A pin
+/// present + matching = the PINNED path, UNCHANGED (the flag is
+/// inert); the UNDETERMINED arms = the existing named lines,
+/// UNCHANGED (their wording already says "and no pin" — accurate
+/// under the flag).
+pub const PINNED_ONLY_REFUSAL: &str = "refusal: --pinned-only (the strict posture) is on — no pin resolves, and the unpinned fallback is disabled (encode with the flag removed, or supply the measured profile file)";
+
 /// The UNPINNED mode's run state (the run's camera-identity mode —
 /// the process-wide slot the run report's unpinned block + the
 /// effective-verify surfaces read, the `pins::set_current` pattern's
@@ -841,6 +853,26 @@ pub static UNPINNED_SLOT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(test)]
 pub fn clear_unpinned_mode_for_tests() {
     *UNPINNED.lock().unwrap() = None;
+}
+
+/// The `--pinned-only` strict-posture flag (the L3 surface — R1): the
+/// process-wide slot the CLI's run-entry site sets (the `set_trial_flag`
+/// CARRY_FLAG pattern — a CLI process runs ONE encode); the encode
+/// gate's UNPINNED entry reads it (the refusal branch). Default OFF —
+/// absent = the unpinned fallback stands (the L1/L2 default behavior);
+/// the PINNED path never reads it (a pin present + matching = the flag
+/// is inert by construction).
+static PINNED_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the `--pinned-only` flag (the CLI's run-entry site, before the
+/// dispatch).
+pub fn set_pinned_only(flag: bool) {
+    PINNED_ONLY.store(flag, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the `--pinned-only` flag (the encode gate's UNPINNED entry).
+pub fn pinned_only() -> bool {
+    PINNED_ONLY.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 // =====================================================================
@@ -2596,5 +2628,35 @@ geometry: 3024 2010 8 archive
             !effective_verify(false),
             "the pinned run (the slot absent): the flag's value (off) — the force is the UNPINNED mode's, never a default (no derived verify — the strict posture stands where the mode stands)"
         );
+    }
+
+    /// The `--pinned-only` NAMED refusal's exact verbatim (the L3
+    /// contract — R1): the strict posture is ON + no pin resolves +
+    /// the frames WOULD enter the UNPINNED mode → the named rc=2
+    /// before any frame (the pre-job class — the refusal fires at the
+    /// gate; nothing is written, the frames are not touched).
+    #[test]
+    fn pinned_only_refusal_line_is_the_verbatim_contract() {
+        assert_eq!(
+            PINNED_ONLY_REFUSAL,
+            "refusal: --pinned-only (the strict posture) is on — no pin resolves, and the unpinned fallback is disabled (encode with the flag removed, or supply the measured profile file)"
+        );
+    }
+
+    /// The flag's slot lifecycle (the L3 contract — R1): default OFF
+    /// (the unpinned fallback stands absent — the L1/L2 default
+    /// behavior), set ON + read back, reset OFF for the sibling KATs
+    /// (the KATs never leak the flag ON across the suite — the
+    /// process-wide slot's parallel-test hazard; the ENV_LOCK
+    /// serializes the flag's KATs).
+    #[test]
+    fn pinned_only_flag_slot_default_off_set_get_reset() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        set_pinned_only(false);
+        assert!(!pinned_only(), "default OFF — the unpinned fallback stands (the L1/L2 behavior)");
+        set_pinned_only(true);
+        assert!(pinned_only(), "the strict posture is ON");
+        set_pinned_only(false);
+        assert!(!pinned_only(), "the reset for the sibling KATs");
     }
 }
