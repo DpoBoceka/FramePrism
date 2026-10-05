@@ -54,7 +54,12 @@ pub(crate) fn finish_tier(
         Ok(report) => {
             print_summary(cli, input, output, &report, elapsed_s);
             if let Some(path) = &cli.report {
-                match write_report(path, &report, cli.verify) {
+                // The effective-verify honesty (the arc B L1 — R4):
+                // the TSV's verify column records what ACTUALLY ran
+                // (the flag OR the unpinned forced-on at the seam —
+                // the slot the encode gate set; the pinned path =
+                // the slot absent = the flag's value, byte-identical).
+                match write_report(path, &report, frameprism::camera::effective_verify(cli.verify)) {
                     Ok(()) => eprintln!("report written to {}", path.display()),
                     Err(err) => {
                         eprintln!("error: failed to write report {}: {err:#}", path.display());
@@ -722,7 +727,12 @@ fn print_summary(cli: &Cli, input: &Path, output: &Path, report: &worker::Report
             ""
         },
         cli.lossy_format,
-        cli.verify,
+        // The effective-verify honesty (the arc B L1 — R4): the
+        // summary's verify field records what ACTUALLY ran (the flag
+        // OR the unpinned forced-on at the seam — the slot the
+        // encode gate set; the pinned path = the slot absent = the
+        // flag's value, byte-identical).
+        frameprism::camera::effective_verify(cli.verify),
         cli.force,
         display_jobs(cli.jobs)
     );
@@ -816,9 +826,10 @@ fn display_jobs(jobs: usize) -> String {
     }
 }
 
-/// Write the TSV report (manifest-compatible columns). the
-/// `verify` column reflects whether `--verify` was actually on (it was
-/// hardcoded "1" before).
+/// Write the TSV report (manifest-compatible columns). The
+/// `verify` column reflects whether verify was EFFECTIVELY on for the
+/// run (the caller passes `camera::effective_verify` — the flag OR the
+/// unpinned forced-on at the seam; it was hardcoded "1" before).
 fn write_report(
     path: &std::path::Path,
     report: &worker::Report,

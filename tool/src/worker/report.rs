@@ -187,38 +187,57 @@ pub fn process_dir(
     crate::live::begin(frames.len());
 
     // --- camera identity gate
-    // OPTION (a)) ------------------------------------------
+    // OPTION (a) + the arc B L1 (the self-describing encode gate)) ---
     // The profile set is loaded ONCE per run (the pins-pattern
     // resolution: the FRAMEPRISM_PROFILES file (the legacy
     // FRAMEPRISM_PROFILES name is honored) -> <cwd>/profiles ->
-    // <exe-dir>/profiles; unresolvable / a corrupt profile = the named
-    // rc=2 — the tool does not encode without its camera identity,
-    // the same posture as the pins) and passed down to the per-frame
-    // gate in run() — not per frame. EVERY frame of the selected set
-    // is resolved against the set BEFORE any write (the FROZEN posture
-    // made explicit: an unknown camera / an unmeasured readout / depth
-    // / CFA is the named refusal — 0 compressed, nothing written to
-    // the output dir, the established refusal mechanics: the named
-    // FAIL lines ride the per-frame class + the run summary + rc=2).
-    // The A001 profile = the embedded constants: a profiled frame
-    // resolves to the SAME layout class the predicates route (the
-    // identity gate is AHEAD of the routing, never a rewrite). The
-    // gate reads the header only (tiff::read_meta — the identity tags;
-    // the encode's own tiff::read in run() is the full parse — the
-    // pre-write identity check, like the ingest gate's header reads;
-    // the resolution never re-parses a frame for the identity). A
-    // 0-frame run has nothing to identify (no load, no refusal —
-    // the pre-record behavior stands).
-    let profiles = if frames.is_empty() {
-        None
+    // <exe-dir>/profiles). A RESOLVABLE set = the PINNED path
+    // (today, byte-identical: every frame of the selected set resolves
+    // against the set BEFORE any write — the FROZEN posture made
+    // explicit: an unknown camera / an unmeasured readout / depth /
+    // CFA is the named refusal — 0 compressed, nothing written to the
+    // output dir, the established refusal mechanics: the named FAIL
+    // lines ride the per-frame class + the run summary + rc=2; the
+    // A001 profile = the embedded constants — a profiled frame
+    // resolves to the SAME layout class the predicates route; the
+    // gate reads the header only — tiff::read_meta, the identity
+    // tags; the encode's own tiff::read in run() is the full parse —
+    // the pre-write identity check, like the ingest gate's header
+    // reads; the resolution never re-parses a frame for the
+    // identity). NO pin present at all (the set unresolvable — the
+    // `(probed: )` class ONLY — a present-but-corrupt pin keeps its
+    // own named refusal above: the pin stays authority when it is
+    // present, a broken pin is never silently bypassed) = the
+    // UNPINNED attempt (the L1 gate restructure): the SAME pre-pass
+    // reads generalize the frame's OWN identity to the primary
+    // identity source (the file-side identity read — no second
+    // parse, no pixel data) + the shipped layout predicates confirm
+    // the structure (the confirmer — header geometry only). All
+    // confirmed = the UNPINNED mode (the encode proceeds through the
+    // EXISTING raw/transcode paths — the routing is the predicates',
+    // unchanged; the verify is forced ON at the seam below — R4; the
+    // ANNOUNCE line prints ONCE at encode start — R3; `frame_classes`
+    // stays EMPTY = the temporal-oracle ctx is never set = the
+    // no-temporal-acceptance construct — the arc ruling, the strict
+    // drill stands). Any UNDETERMINED arm = the named refusal, rc=2,
+    // BEFORE any frame (the frame is NOT touched). A 0-frame run has
+    // nothing to identify (no load, no refusal — the pre-record
+    // behavior stands).
+    let (profiles, unpinned) = if frames.is_empty() {
+        (None, None)
     } else {
-        Some(
-            crate::camera::resolve_profiles().map_err(|err| {
-                anyhow::anyhow!(
+        match crate::camera::resolve_profiles() {
+            Ok(set) => (Some(set), None),
+            Err(err) if err.contains(crate::camera::UNRESOLVABLE_PROBED) => {
+                let mode = unpinned_prepass(&frames)?;
+                (None, Some(mode))
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!(
                     "resolve the camera profile set (the pins-pattern resolution: the FRAMEPRISM_PROFILES file (the legacy FRAMEPRISM_PROFILES name is honored) -> <cwd>/profiles -> <exe-dir>/profiles): {err}"
-                )
-            })?,
-        )
+                ));
+            }
+        }
     };
     // The per-frame class from the pre-pass meta (R2/R3):
     // the temporal-oracle resolver's clip list (the pre-pass-
@@ -228,7 +247,11 @@ pub fn process_dir(
     // the process closure has an entry (the failure paths `continue`
     // to a camera-gate FAIL — the run aborts before the encode loop;
     // the map is complete when it is used). Empty when `profiles`
-    // is `None` (the frames list is empty then — the map is unused).
+    // is `None` (the frames list is empty then — the map is unused —
+    // OR the unpinned mode — the map stays EMPTY BY DESIGN: the
+    // temporal-oracle ctx is never set = the no-temporal-acceptance
+    // construct, the arc ruling; the resolver's class guard degrades
+    // the `Unknown` candidate to a skip — the strict drill stands).
     let mut frame_classes: std::collections::BTreeMap<
         PathBuf,
         crate::frameclass::FrameClass,
@@ -240,62 +263,29 @@ pub fn process_dir(
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| src.display().to_string());
-            // The bounded prefix read (the camera identity's
-            // measured reach is 79,280 B over the committed fixtures
-            // — the bound is 1 MiB); the FAIL wording below is the
-            // pre-record one.
-            let buf = match crate::camera::read_detection_prefix(src) {
-                Ok(b) => b,
-                Err(err) => {
+            // The pre-pass identity window (the shared header read —
+            // the bounded prefix + the sanctioned BadIfdOffset
+            // full-file fallback, the fp camera's tail-IFD frames; one
+            // site, both pre-passes — the bounded-read invariant's
+            // recorded count + keep anchor stand). The FAIL wording
+            // below is the pre-record one (per class).
+            let (meta, id_buf) = match identity_window(src) {
+                Ok(m) => m,
+                Err(IdentityWindowError::Read(err)) => {
                     camera_failures.push(format!(
                         "FAIL {file}: camera identity: read {}: {err}",
                         src.display()
                     ));
                     continue;
                 }
-            };
-            // The identity buffer + the parsed IFD (the bounded prefix
-            // pair). The named FENCE EXCEPTION: the fp camera's frames
-            // place the IFD at the FILE
-            // TAIL (the measured ~4.4 MB offset), beyond the 1 MiB
-            // detection prefix — the parse fails with the OUT-OF-WINDOW
-            // class only (`ParseError::BadIfdOffset` — the beyond-buffer
-            // class; the malformed classes — NotTiff / ImplausibleCount /
-            // UnknownFieldType / IfdStructureOutOfBounds /
-            // RegionOutOfBounds / MissingTag — stay the named FAIL
-            // below, never retried). The retry = the full-file read +
-            // this named note line (the checksums full-read note
-            // vocabulary: `note: {path} — {reason}; reading the full
-            // file`), then the identity on the full buffer. Byte-identity
-            // note: a raw frame parses within the prefix — this
-            // fallback never fires on them (the two-binary control's
-            // byte-equality covers the raw path).
-            let (meta, id_buf) = match crate::tiff::read_meta(&buf) {
-                Ok(m) => (m, std::borrow::Cow::Borrowed(buf.as_slice())),
-                Err(crate::tiff::ParseError::BadIfdOffset(_, _)) => {
-                    eprintln!(
-                        "note: {} — the camera-identity IFD beyond the 1 MiB detection prefix; reading the full file",
+                Err(IdentityWindowError::ReadRetry(err)) => {
+                    camera_failures.push(format!(
+                        "FAIL {file}: camera identity: read {} (the full-file retry): {err}",
                         src.display()
-                    );
-                    let full = match std::fs::read(src) {
-                        Ok(b) => b,
-                        Err(err) => {
-                            camera_failures.push(format!(
-                                "FAIL {file}: camera identity: read {} (the full-file retry): {err}",
-                                src.display()
-                            ));
-                            continue;
-                        }
-                    };
-                    match crate::tiff::read_meta(&full) {
-                        Ok(m) => (m, std::borrow::Cow::Owned(full)),
-                        Err(err) => {
-                            camera_failures.push(format!("FAIL {file}: camera identity: {err}"));
-                            continue;
-                        }
-                    }
+                    ));
+                    continue;
                 }
-                Err(err) => {
+                Err(IdentityWindowError::Parse(err)) => {
                     camera_failures.push(format!("FAIL {file}: camera identity: {err}"));
                     continue;
                 }
@@ -333,6 +323,23 @@ pub fn process_dir(
             ));
         }
     }
+
+    //: the unpinned mode's run surface (the arc B L1 — R3/R4): the
+    // mode slot (the run report's unpinned block + the effective-
+    // verify surfaces read it — the `pins::set_current` pattern) is
+    // set at the gate decision; the verify is FORCED ON for the run
+    // at the seam (the R4 force — the CLI's `--verify` parsing is
+    // untouched, the flag's value is the input; the PINNED path =
+    // the flag's value, byte-identical — verify stays opt-in there). 
+    // The ANNOUNCE line prints ONCE at encode start (below, before
+    // the frame loop — the live stdout line).
+    if let Some(mode) = &unpinned {
+        crate::camera::set_unpinned_mode(mode.clone());
+    }
+    // The R4 force at the seam (the unpinned run's effective verify is
+    // ON — the round-trip pass on every frame; the pinned path = the
+    // flag's value, unchanged):
+    let verify = verify || unpinned.is_some();
 
     // --- ingest safety gate --------------
     // Unconditional BY DEFAULT (no escape flag) and BEFORE anything
@@ -617,6 +624,15 @@ pub fn process_dir(
     // pattern); the RAII guard closes (flushes) the writer at the
     // run's end on EVERY path.
     let _profile_sidecar = crate::profile::open_sidecar(output);
+    //: the unpinned mode's ANNOUNCE (the arc B L1 — R3): ONCE per
+    // run, at encode start (after the gates — the run is refusing
+    // above when it does not start; before the first frame's live
+    // line), the live stdout line. The report's copy is the run
+    // report's unpinned block (the report-line surface — the same
+    // verbatim line + the confirmation line).
+    if let Some(mode) = &unpinned {
+        println!("{}", mode.announce_line());
+    }
     let t0 = Instant::now();
     //: the encode + the per-frame sidecar append + the status
     // lines. The POSITIONAL outcome order (the frames order) is the
@@ -1226,6 +1242,131 @@ pub fn process_dir(
         checksums: checksums_path,
         offload_dirty_rows: offload_report.as_ref().map(|r| r.dirty_count()),
     })
+}
+
+/// The pre-pass identity window's error classes (the named wordings —
+/// the pinned pre-pass renders each with its pre-record FAIL line,
+/// the unpinned pre-pass maps every class to the UNDETERMINED arm-1
+/// named refusal: the file's identity is unreadable, one way or
+/// another — the line's own wording).
+enum IdentityWindowError {
+    /// The bounded prefix read failed (io).
+    Read(std::io::Error),
+    /// The sanctioned full-file retry's read failed (io — the fp
+    /// camera's tail-IFD frames; the note line already fired).
+    ReadRetry(std::io::Error),
+    /// The header does not parse (the `read_meta` named class — the
+    /// prefix or the full buffer).
+    Parse(crate::tiff::ParseError),
+}
+
+/// The pre-pass identity window (the shared header read of the
+/// camera-identity pre-passes — the pinned + the unpinned): the
+/// bounded prefix read (the camera identity's measured reach is
+/// 79,280 B over the committed fixtures — the bound is 1 MiB) +
+/// `read_meta`, with the named FENCE EXCEPTION: the fp camera's frames
+/// place the IFD at the FILE TAIL (the measured ~4.4 MB offset),
+/// beyond the 1 MiB detection prefix — the parse fails with the
+/// OUT-OF-WINDOW class only (`ParseError::BadIfdOffset` — the
+/// beyond-buffer class; the malformed classes — NotTiff /
+/// ImplausibleCount / UnknownFieldType / IfdStructureOutOfBounds /
+/// RegionOutOfBounds / MissingTag — stay the named error, never
+/// retried). The retry = the full-file read (the item-121 sanctioned
+/// pre-pass exception — the header/identity read, never the strip:
+/// no pixel data) + the named note line (the checksums full-read note
+/// vocabulary: `note: {path} — {reason}; reading the full file`),
+/// then the identity on the full buffer. ONE site, BOTH pre-passes
+/// (the bounded-read invariant's recorded count + keep anchor stand —
+/// no new whole-file read; a raw frame parses within the prefix — the
+/// fallback never fires on them). The per-class error wordings are
+/// the pre-record ones (the pinned path's observable FAIL lines are
+/// byte-identical: the same line, the same order, the same note).
+fn identity_window(
+    src: &Path,
+) -> Result<(crate::tiff::Meta, Vec<u8>), IdentityWindowError> {
+    let buf = match crate::camera::read_detection_prefix(src) {
+        Ok(b) => b,
+        Err(err) => return Err(IdentityWindowError::Read(err)),
+    };
+    match crate::tiff::read_meta(&buf) {
+        Ok(m) => Ok((m, buf)),
+        Err(crate::tiff::ParseError::BadIfdOffset(_, _)) => {
+            eprintln!(
+                "note: {} — the camera-identity IFD beyond the 1 MiB detection prefix; reading the full file",
+                src.display()
+            );
+            let full = match std::fs::read(src) {
+                Ok(b) => b,
+                Err(err) => return Err(IdentityWindowError::ReadRetry(err)),
+            };
+            match crate::tiff::read_meta(&full) {
+                Ok(m) => Ok((m, full)),
+                Err(err) => Err(IdentityWindowError::Parse(err)),
+            }
+        }
+        Err(err) => Err(IdentityWindowError::Parse(err)),
+    }
+}
+
+/// The unpinned pre-pass (the arc B L1 — R1/R2/R3 — the
+/// confirm-or-refuse boundary): over the SAME per-frame reads the
+/// pinned pre-pass performs (the bounded prefix → `read_meta` — the
+/// identity tags; the fp camera's tail-IFD fence exception — the
+/// full-file retry + the named note line; the resolution never
+/// re-parses, no pixel data — the item-121 pre-pass full-read fence
+/// exception class does not apply: the confirmation is header
+/// geometry only), every frame must SELF-DESCRIBE (the identity
+/// readable — `identity_from_ifd0` — the generalized file-side read,
+/// the primary identity source when no pin is present) and be
+/// CONFIRMED (a shipped layout predicate holds against the frame's
+/// own geometry — `confirm_layout` — the confirmer). The FIRST
+/// failure wins (the sorted frames order — deterministic): an
+/// unreadable / unparseable header, or no readable identity, = the
+/// UNDETERMINED arm-1 named refusal; an identity no predicate
+/// confirms = the arm-2 named refusal (the offending identity
+/// filled) — both rc=2 BEFORE any frame (the pre-write gate — the
+/// frame is NOT touched, nothing written to the output dir). All
+/// confirmed = the UNPINNED mode: the FIRST frame's identity + its
+/// confirming predicate (the deterministic sample, the audit's v1
+/// precedent; every frame confirmed against its OWN identity).
+pub(crate) fn unpinned_prepass(
+    frames: &[(PathBuf, PathBuf)],
+) -> Result<crate::camera::UnpinnedMode> {
+    let mut first: Option<(crate::camera::FrameIdentity, &'static str)> = None;
+    for (src, _) in frames {
+        // The pre-pass identity window (the shared header read — the
+        // bounded prefix + the sanctioned BadIfdOffset full-file
+        // fallback, the fp camera's tail-IFD frames: the SAME read
+        // class the pinned pre-pass performs before routing, no pixel
+        // data). An unreadable / unparseable header, or no readable
+        // identity, = the UNDETERMINED arm-1 named refusal (the line's
+        // own wording: the file's Make/Model is absent or unreadable).
+        let (meta, id_buf) = match identity_window(src) {
+            Ok(m) => m,
+            Err(_) => return Err(anyhow::anyhow!(crate::camera::UNDETERMINED_ARM1)),
+        };
+        let ident = match crate::camera::identity_from_ifd0(&meta.ifd0, id_buf.as_ref()) {
+            Ok(i) => i,
+            Err(_) => return Err(anyhow::anyhow!(crate::camera::UNDETERMINED_ARM1)),
+        };
+        let predicate = match crate::worker::encode::confirm_layout(
+            ident.width,
+            ident.height,
+            ident.bits_per_sample,
+        ) {
+            Some(p) => p,
+            None => {
+                let line = crate::camera::undetermined_arm2_line(&ident);
+                return Err(anyhow::anyhow!("{line}"));
+            }
+        };
+        if first.is_none() {
+            first = Some((ident, predicate));
+        }
+    }
+    let (identity, predicate) = first
+        .expect("a non-empty frames list has a first frame (the caller's `frames.is_empty()` guard)");
+    Ok(crate::camera::UnpinnedMode { identity, predicate })
 }
 
 /// Collect frames (`.dng`) + sidecars (everything else) under `base`,
@@ -2225,5 +2366,112 @@ mod tests {
         assert_eq!(frames[0].0, tmp.join("A001_20260101_000001.DNG"), "{frames:?}");
         assert!(sidecars.is_empty(), "no `._*` sidecar in the mirror: {sidecars:?}");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ---- the unpinned pre-pass (the arc B L1 — the confirm-or-
+    // refuse boundary) ----
+
+    /// The unpinned pre-pass's CONFIRMED arm (R1/R2): every frame
+    /// self-describes + a shipped predicate confirms → the UNPINNED
+    /// mode (the FIRST frame's identity + its confirming predicate —
+    /// the deterministic sample; every frame confirmed against its
+    /// OWN — the second frame here confirms on a DIFFERENT predicate,
+    /// so a missing per-frame confirmation would refuse, not pass).
+    #[test]
+    fn unpinned_prepass_confirms_the_mode() {
+        let base = std::env::temp_dir().join(format!("frameprism-unpinned-prepass-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // Frame 1: the SIGMA fp's UHD-12 readout (the tile layout —
+        // the transcode path's source shape) · Frame 2: the FHD @10
+        // readout (the archive layout — a DIFFERENT predicate holds).
+        let f1 = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(
+            &f1,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let f2 = base.join("A001_001_20260101_000002.DNG");
+        std::fs::write(
+            &f2,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 1936, 1090, 10, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let frames = vec![
+            (f1.clone(), base.join("out/f1.DNG")),
+            (f2.clone(), base.join("out/f2.DNG")),
+        ];
+        let mode = unpinned_prepass(&frames).expect("all confirmed → the unpinned mode");
+        assert_eq!(mode.predicate, crate::camera::PRED_TILE, "the first frame's confirming predicate");
+        assert_eq!(mode.identity.make, "SIGMA");
+        assert_eq!(mode.identity.model, "SIGMA fp");
+        assert_eq!((mode.identity.width, mode.identity.height, mode.identity.bits_per_sample), (3856, 2170, 12));
+        // The single-frame archive arm (the confirmer over the FHD
+        // geometry — the archive predicate's name rides the mode):
+        let frames = vec![(f2, base.join("out/f2.DNG"))];
+        let mode = unpinned_prepass(&frames).expect("the FHD @10 frame confirms (archive)");
+        assert_eq!(mode.predicate, crate::camera::PRED_ARCHIVE);
+        assert_eq!((mode.identity.width, mode.identity.height, mode.identity.bits_per_sample), (1936, 1090, 10));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// UNDETERMINED arm 1 through the pre-pass (the L1 contract — the
+    /// verbatim named refusal, rc=2 before any frame): a frame whose
+    /// Make/Model is absent (the no-identity-tag minimal DNG) + no pin
+    /// → the arm-1 line, the run refused before any write.
+    #[test]
+    fn unpinned_prepass_refuses_arm1_named() {
+        let base = std::env::temp_dir().join(format!("frameprism-unpinned-arm1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // The minimal single-entry DNG (the 51043 tag only — the
+        // identity tags ABSENT): `read_meta` parses, `identity_from_
+        // ifd0` refuses → arm 1.
+        let f = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(&f, crate::worker::testutil::synthetic_dng(Some(&[0u8; 8]), 1, 8, None)).unwrap();
+        let frames = vec![(f, base.join("out/f.DNG"))];
+        let err = unpinned_prepass(&frames).unwrap_err();
+        assert_eq!(
+            format!("{err:?}"),
+            crate::camera::UNDETERMINED_ARM1,
+            "the verbatim arm-1 named line"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// UNDETERMINED arm 2 through the pre-pass (the L1 contract — the
+    /// verbatim named refusal, the offending identity filled, rc=2
+    /// before any frame): the identity self-describes but no shipped
+    /// predicate confirms the foreign geometry (1024×768 @12 —
+    /// neither the tile nor the archive layout).
+    #[test]
+    fn unpinned_prepass_refuses_arm2_named() {
+        let base = std::env::temp_dir().join(format!("frameprism-unpinned-arm2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let f = base.join("A001_001_20260101_000001.DNG");
+        std::fs::write(
+            &f,
+            crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 1024, 768, 12, 32803, Some([0u8; 8])),
+        )
+        .unwrap();
+        let frames = vec![(f, base.join("out/f.DNG"))];
+        let err = unpinned_prepass(&frames).unwrap_err();
+        assert_eq!(
+            format!("{err:?}"),
+            crate::camera::undetermined_arm2_line(&crate::camera::FrameIdentity {
+                make: "SIGMA".into(),
+                model: "SIGMA fp".into(),
+                width: 1024,
+                height: 768,
+                bits_per_sample: 12,
+                photometric: 32803,
+            }),
+            "the verbatim arm-2 named line (the identity filled)"
+        );
+        assert!(format!("{err:?}").contains(
+            "refusal: camera SIGMA SIGMA fp 1024x768 @12-bit is self-described but no tile/archive layout confirms"
+        ));
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

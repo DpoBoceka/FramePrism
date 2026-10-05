@@ -1227,6 +1227,22 @@ pub fn write_reports(
             md.push('\n');
         }
     }
+    //: the unpinned block (the self-describing encode gate, the arc B
+    // L1 — R2/R3): IFF the unpinned mode slot is set (the encode
+    // path sets it at the gate decision — `camera::set_unpinned_mode`
+    //; a PINNED run = the slot absent = no block — the report stays
+    // byte-identical to the pinned shape, the R2 record's
+    // byte-identity clause). The ANNOUNCE line (the live stdout
+    // line's record copy — the same verbatim line, one spelling) +
+    // the confirmation line (the predicate's name — the confirmer's
+    // attestation). No wall clock (the contract — the run report's
+    // single `created:` line stands alone).
+    if let Some(mode) = crate::camera::unpinned_mode() {
+        md.push_str(&mode.announce_line());
+        md.push('\n');
+        md.push_str(&mode.confirmation_line());
+        md.push('\n');
+    }
     md.push_str(&format!("input: {}\n", input.display()));
     md.push_str(&format!("output: {}\n", output.display()));
     //: the pinned exFAT destination note (byte-stable — the
@@ -2368,5 +2384,82 @@ mod tests {
         );
         assert!(manifest.contains("version: 1"), "the manifest's fields are unchanged: \n{manifest}");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ---- the unpinned block (the arc B L1 — the R2 record) ----
+
+    /// The run report's unpinned block (the R2 record): IFF the
+    /// unpinned mode slot is set, the block renders (the ANNOUNCE +
+    /// the confirmation lines — the same verbatim lines as the live
+    /// stdout surface, one spelling); the slot absent (the PINNED
+    /// run) = no block — the report is byte-identical to the pinned
+    /// shape (the R2 byte-identity clause). The slot KAT serializes on
+    /// the process-wide slot's lock + resets it (the KAT-only
+    /// discipline).
+    #[test]
+    fn run_report_carry_the_unpinned_block_iff_the_slot_is_set() {
+        let _lock = crate::camera::UNPINNED_SLOT_LOCK.lock().unwrap();
+        let base = std::env::temp_dir().join(format!("frameprism-report-unpinned-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("out")).unwrap();
+        let (gate, frames, outcomes) = synth_run(&base);
+        let sidecar = base.join("out").join("X.checksums.tsv");
+        // The PINNED shape (the slot absent): no unpinned block.
+        crate::camera::clear_unpinned_mode_for_tests();
+        let p1 = write_reports(
+            &base.join("out"),
+            &base.join("in"),
+            "j92",
+            jpeg_turbo_build(),
+            &gate,
+            &frames,
+            &outcomes,
+            None,
+            Some(&sidecar),
+        )
+        .unwrap();
+        let t1 = std::fs::read_to_string(&p1[2]).unwrap();
+        assert!(!t1.contains("unpinned encode:"), "the pinned run report carries no unpinned block:\n{t1}");
+        assert!(!t1.contains("unpinned confirmation:"), "the pinned run report carries no confirmation line:\n{t1}");
+        // The UNPINNED shape (the slot set): the ANNOUNCE + the
+        // confirmation lines (the verbatim contract lines).
+        crate::camera::set_unpinned_mode(crate::camera::UnpinnedMode {
+            identity: crate::camera::FrameIdentity {
+                make: "SIGMA".into(),
+                model: "SIGMA fp".into(),
+                width: 3856,
+                height: 2170,
+                bits_per_sample: 12,
+                photometric: 32803,
+            },
+            predicate: crate::camera::PRED_TILE,
+        });
+        let p2 = write_reports(
+            &base.join("out"),
+            &base.join("in"),
+            "j92",
+            jpeg_turbo_build(),
+            &gate,
+            &frames,
+            &outcomes,
+            None,
+            Some(&sidecar),
+        )
+        .unwrap();
+        let t2 = std::fs::read_to_string(&p2[2]).unwrap();
+        assert!(
+            t2.contains(
+                "unpinned encode: SIGMA SIGMA fp 3856x2170 @12-bit (self-described; no pin — verify-on, no temporal acceptance; to pin this camera: the measured profile file)"
+            ),
+            "the ANNOUNCE line (the verbatim contract line):\n{t2}"
+        );
+        assert!(
+            t2.contains(
+                "unpinned confirmation: tile (the shipped predicate that holds against the frame's own structure — the routing is the predicate's)"
+            ),
+            "the confirmation line (the predicate's name):\n{t2}"
+        );
+        crate::camera::clear_unpinned_mode_for_tests();
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
