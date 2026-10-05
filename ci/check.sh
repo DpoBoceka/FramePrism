@@ -273,5 +273,5 @@ if [ $gui_selftest_rc -ne 0 ] || [ "$GUI_SELFTEST_OUT" != "gui selftest: OK (1/1
 fi
 
 # --- step 12: summary ---------------------------------------------------------
-echo "ci check: ALL PASS (pins $PINS_OK/$PINS_TOT, fixtures 12/12 regenerated, suite 622/0/1, oracle10 10/10 @ 72325126 B, oracle108 10/10 @ 2380943 B, audit 0 vulns (485 deps), fuzz 25/25 pinned, gui selftest OK)"
+echo "ci check: ALL PASS (pins $PINS_OK/$PINS_TOT, fixtures 12/12 regenerated, suite 622/0/1, oracle10 10/10 @ 72325126 B, oracle108 10/10 @ 2380943 B, audit 0 vulns (487 deps), fuzz 25/25 pinned, gui selftest OK)"
 exit 0

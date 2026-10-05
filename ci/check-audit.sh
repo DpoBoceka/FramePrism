@@ -46,7 +46,7 @@ PIN_ADVISORIES="Loaded 1246 security advisories"
 # is the audited surface; a dep-tree drift that adds a vulnerable
 # crate, or an advisory-count drift from an unstaged db refresh, is a
 # named FAIL).
-PIN_DEPS="485 crate dependencies"
+PIN_DEPS="487 crate dependencies"
 
 echo "=== ci check-audit: $(date '+%Y-%m-%d %H:%M:%S') repo=$REPO ==="
 
@@ -69,5 +69,5 @@ if [ -n "$miss" ]; then
   printf '%s\n' "$out" | head -4
   exit 1
 fi
-echo "audit: PASS (0 vulnerabilities, 485 deps, 1246 advisories)"
+echo "audit: PASS (0 vulnerabilities, 487 deps, 1246 advisories)"
 exit 0

@@ -7,7 +7,10 @@
 //! (the core exposes no live frame-level progress — the honest unit is
 //! the clip). No cancel (the job runs to completion — an honest
 //! absence, not a hidden one), no offload/verify/wipe verbs. The path
-//! fields are text-only (no native dialog).
+//! fields are text-editable + the native folder pickers (the
+//! `Browse…` buttons — the rfd sync pick: a pick REPLACES the field
+//! text, a cancel leaves it UNCHANGED — a cancel is not an error, no
+//! status line).
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -72,6 +75,27 @@ impl App {
                 self.checked = Vec::new();
                 self.status = err; // the named line — never hidden
             }
+        }
+    }
+
+    /// The native folder pick (the `Browse…` button) for one of the
+    /// two path fields (the source / the dest): the rfd SYNC picker,
+    /// opened at the current field text when it names an existing
+    /// dir. A pick REPLACES the field text; a cancel leaves it
+    /// UNCHANGED (no status line — a cancel is not an error, the
+    /// honest absence). The Scan button stays EXPLICIT (the browse
+    /// does not auto-scan — the owner's control). An associated fn
+    /// (not a `&mut self` method): the `Self::do_browse(&mut
+    /// self.field)` call keeps the single disjoint field borrow (a
+    /// whole-self `&mut self` receiver + a `&mut` field arg would be
+    /// the E0499 overlap).
+    fn do_browse(field: &mut String) {
+        let mut picker = rfd::FileDialog::new();
+        if std::path::Path::new(field.as_str()).is_dir() {
+            picker = picker.set_directory(field.as_str());
+        }
+        if let Some(path) = picker.pick_folder() {
+            *field = path.to_string_lossy().into_owned();
         }
     }
 
@@ -150,7 +174,8 @@ impl eframe::App for App {
     /// The UI (the utility shape — the six surface elements).
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ui, |ui| {
-            // (1) the source dir + the on-demand scan.
+            // (1) the source dir + the on-demand scan + the native
+            // Browse pick.
             ui.horizontal(|ui| {
                 ui.label("Source dir");
                 ui.add(
@@ -160,6 +185,9 @@ impl eframe::App for App {
                 );
                 if ui.button("Scan").clicked() {
                     self.do_scan();
+                }
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse(&mut self.source);
                 }
             });
             ui.separator();
@@ -199,7 +227,7 @@ impl eframe::App for App {
                     });
             });
 
-            // (3) the dest dir (text-only — the v1 path fields).
+            // (3) the dest dir (text + the native Browse pick).
             ui.horizontal(|ui| {
                 ui.label("Dest dir");
                 ui.add(
@@ -207,6 +235,9 @@ impl eframe::App for App {
                         .hint_text("/path/to/encoded")
                         .desired_width(420.0),
                 );
+                if ui.button("Browse…").clicked() {
+                    Self::do_browse(&mut self.dest);
+                }
             });
 
             // (4) the start (disabled while a job runs — the pre-job
