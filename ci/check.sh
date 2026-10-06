@@ -24,7 +24,7 @@
 # vs the source-derived planes, via check-xcheck.sh), the OFFLINE dependency audit
 # (pinned cargo-audit v0.22.2 + pinned rustsec/advisory-db snapshot,
 # via check-audit.sh), the GUI app step (the frameprism-gui release
-# build + the lib suite gate (4/0/0) + the headless selftest — the
+# build + the lib suite gate (8/0/0) + the headless selftest — the
 # VERBATIM OK line is the pinned-wording teeth), and the
 # C-boundary fuzz corpus (25 pinned-outcome fixtures over `frameprism
 # decode`, via check-fuzz.sh). Any failure is a named FAIL +
@@ -243,12 +243,19 @@ fi
 
 # --- step 11: gui app (the desktop app's gate step) ------------------------
 # The gui workspace member (frameprism-gui): the release build of the
-# app binary + the lib suite gate (5/0/0 — the named-wording tests:
-# the arbiter map/refusal, the in-place guard, the profile-seam
-# semantics, the headless encode selftest, the job-state transitions)
+# app binary + the lib suite gate (8/0/0 — the R9 named-wording tests:
+# the v1 3 UNCHANGED — the arbiter map/refusal, the in-place guard,
+# the profile-seam semantics; the 1-for-1 REPLACEMENT — the headless
+# process selftest (the v1 headless encode selftest, replaced); the
+# 1-for-1 re-aim — the process job transitions (the v1 job-state
+# transitions, re-aimed to the leg model); the 3 NEW — the 4-mode leg
+# arbiter, the pre-job refusals, the Mirror-this-output prefill)
 # + the headless selftest run
 # (NO window / GPU — the lib path only; the committed fixture's
-# one-frame encode; the VERBATIM OK line is the pinned-wording
+# Process-surface flow — the session structure (session 1 the Encode
+# leg; session 2 the Mirror + Decode legs; the Derive leg over the
+# 12-bit master — AMENDMENT #3; the refusal step); the VERBATIM OK
+# line is the pinned-wording
 # teeth). Silent on PASS (the summary token carries it); every
 # failure is a named FAIL + rc=1.
 if ! cargo build --release -p frameprism-gui; then
@@ -258,17 +265,17 @@ fi
 GUI_SUITE_LOG="$(cargo test --release --lib -p frameprism-gui 2>&1)"
 GUI_SUITE_LINE="$(printf '%s\n' "$GUI_SUITE_LOG" | grep 'test result' | tail -1)"
 case "$GUI_SUITE_LINE" in
-  ""*"5 passed; 0 failed; 0 ignored"*) ;;
+  ""*"8 passed; 0 failed; 0 ignored"*) ;;
   *)
-    echo "FAIL ci check: the gui app step — the lib suite gate drift — expected '5 passed; 0 failed; 0 ignored', got: ${GUI_SUITE_LINE:-'(no test result line — build/test error, log tail below)'}"
+    echo "FAIL ci check: the gui app step — the lib suite gate drift — expected '8 passed; 0 failed; 0 ignored', got: ${GUI_SUITE_LINE:-'(no test result line — build/test error, log tail below)'}"
     printf '%s\n' "$GUI_SUITE_LOG" | tail -5
     exit 1 ;;
 esac
 GUI_BIN="$CARGO_TARGET_DIR/release/frameprism-gui"
 GUI_SELFTEST_OUT="$("$GUI_BIN" --selftest)"
 gui_selftest_rc=$?
-if [ $gui_selftest_rc -ne 0 ] || [ "$GUI_SELFTEST_OUT" != "gui selftest: OK (1/1 clips, rc=0, lossless)" ]; then
-  echo "FAIL ci check: the gui app step — the headless selftest — expected rc=0 + the VERBATIM OK line 'gui selftest: OK (1/1 clips, rc=0, lossless)' (got rc=$gui_selftest_rc, the output below)"
+if [ $gui_selftest_rc -ne 0 ] || [ "$GUI_SELFTEST_OUT" != "gui selftest: OK (3 legs rc=0, derive 1/1, refusal named, 1 frame)" ]; then
+  echo "FAIL ci check: the gui app step — the headless selftest — expected rc=0 + the VERBATIM OK line 'gui selftest: OK (3 legs rc=0, derive 1/1, refusal named, 1 frame)' (got rc=$gui_selftest_rc, the output below)"
   printf '%s\n' "$GUI_SELFTEST_OUT"
   exit 1
 fi
