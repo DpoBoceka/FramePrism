@@ -1,10 +1,13 @@
-//! The profile-measure measurement core (the arc B L4 — R1/R2/R3):
-//! the bounded-read scan over a source tree (clips) + the per-
-//! (geometry × depth) census + the temporal-bound derivation (the 4×
-//! house rule on the divergent-tile census — the item-124 machinery
-//! quoted from source) + the candidate-profile writer (the loader's
-//! inverse — a pure fn over the measurement; the file write is the
-//! verb's `--out`-required surface, a later arc lane).
+//! The profile-measure measurement core + the profile-measure verb
+//! (the measurement — R1/R2/R3: the bounded-read scan over a source
+//! tree (clips) + the per-(geometry × depth) census + the
+//! temporal-bound derivation (the 4× house rule on the divergent-tile
+//! census — the item-124 machinery quoted from source) + the
+//! candidate-profile writer (the loader's inverse — a pure fn over
+//! the measurement) + the verb's surface: the `--out`-required
+//! candidate write (the house's atomic temp+rename, the explicit path
+//! only) + the multi-root composition (the pure census merge — the
+//! read path is the frozen per-root scan) + the report surface).
 //!
 //! **The bounded-read fence (the reuse is the contract — the
 //! tripwire's binding):** the scan performs NO new read class. Per
@@ -66,13 +69,18 @@
 //! the tool's constant + the fp-transcode path's ctx, never
 //! profile-keyed — the strict default).
 //!
-//! NO file write in this surface: `candidate_profile` is a pure fn
-//! (`Measurement` → the profile file string).
+//! NO measurement semantics in the write: `candidate_profile` is a
+//! pure fn (`Measurement` → the profile file string). The file write
+//! is the verb's `--out`-required surface (this module's `run` — the
+//! house's atomic temp+rename, the explicit path only: a missing
+//! parent dir is the named refusal, no partial write).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 use anyhow::Context;
+use clap::Args as ClapArgs;
 
 use crate::camera;
 use crate::frameclass;
@@ -166,6 +174,7 @@ pub struct ReadoutCoverage {
 /// drill-verified neighbor at this tile (the ordinal-boundary /
 /// no-neighbor class — the delta is unmeasurable, the tile is still
 /// census-counted)).
+#[derive(Clone)]
 pub struct DivergentTile {
     pub frame: String,
     pub ordinal: Option<u64>,
@@ -1061,6 +1070,358 @@ pub fn measurement_report(m: &Measurement) -> String {
 }
 
 // =====================================================================
+// The profile-measure verb (the CLI surface — the measure → review →
+// pin onboarding): the Args + the named refusals + the multi-root
+// composition (the pure census merge) + the run (the report surface +
+// the atomic write to the explicit --out path only)
+// =====================================================================
+
+/// The `--out`-REQUIRED NAMED usage refusal (the owner's ruling —
+/// verbatim; the KAT pins it exact).
+pub const OUT_REQUIRED_REFUSAL: &str = "usage: profile-measure requires --out <FILE> (the candidate profile is a reviewed artifact — the tool writes it where you say, nowhere else)";
+
+/// The missing-parent-dir NAMED write refusal (the `--out`'s parent
+/// absent — the candidate is written to the explicit path only: no
+/// dir is created, no partial write; the KAT pins the form).
+pub fn missing_parent_refusal(out: &Path) -> String {
+    format!(
+        "usage: profile-measure --out {}: the parent dir does not exist (the candidate profile is a reviewed artifact written to the explicit --out path only — no dir is created, no partial write)",
+        out.display()
+    )
+}
+
+/// The SOURCE-not-a-directory NAMED usage refusal (the pre-scan band
+/// — the named line; the KAT pins the behavior).
+pub fn not_a_dir_refusal(source: &Path) -> String {
+    format!("profile-measure: SOURCE is not a directory: {}", source.display())
+}
+
+/// The `frameprism profile-measure` CLI arguments (the
+/// `Cmd::ProfileMeasure` payload — the subcommand args live in the
+/// lib, not `main.rs`, per the shared CLI restructure contract).
+#[derive(ClapArgs, Debug)]
+pub struct Args {
+    /// The source tree(s) of clips to measure (one or more — a camera
+    /// batch can span dirs; every source is scanned read-only, the
+    /// bounded-read pass — the sources are never modified)
+    #[arg(
+        value_name = "SOURCE",
+        num_args = 1..,
+        required = true
+    )]
+    pub source: Vec<PathBuf>,
+
+    /// The candidate profile's output path (REQUIRED — the candidate
+    /// is a reviewed artifact: the tool writes it where you say,
+    /// nowhere else; the parent dir must exist — a missing parent is
+    /// the named refusal, no partial write)
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+}
+
+/// The multi-root composition (R1's ruling — the PURE census merge;
+/// the read path is the frozen per-root `measure_tree`, unchanged —
+/// NO core restructure): one or more source trees → the per-root
+/// measurements (each root's own bounded-read pass + its own
+/// within-root neighbor walk) → the pure merge: the coverage census
+/// per readout merged (the frame + clip counts summed — a clip name
+/// shared by two roots counts once per root; the per-root census' union
+/// is unmeasurable from it), the class census merged (the pinned
+/// vocabulary's order), the rows merged per (W,H,bits) (the counts
+/// summed; the predicates / grid dims / photometric are pure over the
+/// uniform identity + geometry — identical across roots by
+/// construction), the divergent-tile census concatenated + re-sorted
+/// with `measure_tree`'s EXACT comparator (the stable order — the root
+/// argument order breaks any cross-root ties) with the band the max
+/// over the MERGED census + the bound 4× (the frozen formula), and the
+/// naming / camera id re-derived over the concatenated frame list (the
+/// batch-wide single-camera contract — the existing discovery walk, a
+/// directory walk only: NO new read class, the tripwire untouched).
+/// The cross-root identity drift (a later root a different camera) =
+/// the named note + that root's rows excluded (the L4 within-root
+/// drift's cross-root mirror — the frames stay counted in the totals +
+/// the class census). The single-source case = the core's own
+/// measurement returned as-is (the verb and the core agree by
+/// construction — the continuity smoke's teeth).
+pub fn measure_sources(roots: &[&Path]) -> Result<Measurement, String> {
+    if roots.is_empty() {
+        return Err(
+            "profile-measure: no SOURCE trees (the batch needs at least one tree of clips)".to_string(),
+        );
+    }
+    let mss: Vec<Measurement> = roots
+        .iter()
+        .map(|r| measure_tree(r))
+        .collect::<Result<Vec<_>, _>>()?;
+    if mss.len() == 1 {
+        return Ok(mss
+            .into_iter()
+            .next()
+            .expect("the single measurement"));
+    }
+    merge_measurements(roots, &mss)
+}
+
+/// The pure census merge over the per-root measurements (no read
+/// site — the composition is over the measurements only + the
+/// discovery walk for the batch-wide naming / camera id).
+fn merge_measurements(
+    roots: &[&Path],
+    mss: &[Measurement],
+) -> Result<Measurement, String> {
+    // The batch-uniform identity (the argument order: the first
+    // readable identity) + the cross-root drift verdict (the
+    // single-camera contract — the L4 within-root drift's cross-root
+    // mirror: a later root a different camera = the named note + its
+    // rows uncounted).
+    let identity = mss
+        .iter()
+        .find(|m| m.identity.is_some())
+        .and_then(|m| m.identity.clone());
+    let drifted: Vec<bool> = mss
+        .iter()
+        .map(|m| {
+            matches!(
+                (&identity, &m.identity),
+                (Some(a), Some(b)) if a.make != b.make || a.model != b.model
+            )
+        })
+        .collect();
+    for (i, is_drifted) in drifted.iter().enumerate() {
+        if *is_drifted {
+            let m = &mss[i];
+            let id = m
+                .identity
+                .as_ref()
+                .expect("a drifted root has a readable identity");
+            let first = identity
+                .as_ref()
+                .expect("a drift implies the merged identity");
+            eprintln!(
+                "note: {} — camera identity {} {} drifts from the batch's {} {} (the measure census: the single-camera contract — the root's frames are uncounted in the rows)",
+                m.root, id.make, id.model, first.make, first.model
+            );
+        }
+    }
+    // The rows + the readouts (the drifted roots' contribution
+    // excluded — the L4 within-root semantics' cross-root mirror) +
+    // the class census (every frame, drift included — the L4
+    // within-root shape) + the named lists (concatenated; the
+    // drifted roots' named entry = their root line).
+    let mut row_acc: BTreeMap<(u32, u32, u16), (u64, u64)> = BTreeMap::new();
+    let mut row_first: BTreeMap<(u32, u32, u16), GeometryRowMeasured> = BTreeMap::new();
+    let mut readout_acc: BTreeMap<(u32, u32), (u64, u64)> = BTreeMap::new();
+    let mut readout_first: BTreeMap<(u32, u32), ReadoutCoverage> = BTreeMap::new();
+    let mut class_acc: BTreeMap<frameclass::FrameClass, u64> = BTreeMap::new();
+    let mut unidentifiable: Vec<String> = Vec::new();
+    let mut unconfirmed: Vec<String> = Vec::new();
+    for (m, is_drifted) in mss.iter().zip(drifted.iter()) {
+        for (c, n) in &m.frames_by_class {
+            *class_acc.entry(*c).or_insert(0) += n;
+        }
+        unidentifiable.extend(m.unidentifiable.iter().cloned());
+        unconfirmed.extend(m.unconfirmed.iter().cloned());
+        if *is_drifted {
+            unidentifiable.push(m.root.clone());
+            continue;
+        }
+        for r in &m.rows {
+            let key = (r.width, r.height, r.bits);
+            row_first.entry(key).or_insert_with(|| r.clone());
+            let e = row_acc.entry(key).or_insert((0, 0));
+            e.0 += r.frames;
+            e.1 += r.clips;
+        }
+        for rc in &m.readouts {
+            let key = (rc.width, rc.height);
+            readout_first.entry(key).or_insert_with(|| rc.clone());
+            let e = readout_acc.entry(key).or_insert((0, 0));
+            e.0 += rc.frames;
+            e.1 += rc.clips;
+        }
+    }
+    let mut rows: Vec<GeometryRowMeasured> = Vec::new();
+    for (key, (frames, clips)) in &row_acc {
+        let mut r = row_first
+            .get(key)
+            .expect("the row's first occurrence")
+            .clone();
+        r.frames = *frames;
+        r.clips = *clips;
+        rows.push(r);
+    }
+    let readouts: Vec<ReadoutCoverage> = readout_acc
+        .iter()
+        .map(|(key, (frames, clips))| {
+            let mut rc = readout_first
+                .get(key)
+                .expect("the readout's first occurrence")
+                .clone();
+            rc.frames = *frames;
+            rc.clips = *clips;
+            rc
+        })
+        .collect();
+    // The divergent-tile census (the concatenation re-sorted with
+    // `measure_tree`'s EXACT comparator — the stable order; the band
+    // the max over the MERGED census; the bound 4× — the frozen
+    // formula).
+    let mut divergent: Vec<DivergentTile> = Vec::new();
+    for m in mss {
+        divergent.extend(m.temporal.divergent.iter().cloned());
+    }
+    divergent.sort_by(|a, b| {
+        (a.ordinal, &a.frame, a.tile_index)
+            .cmp(&(b.ordinal, &b.frame, b.tile_index))
+    });
+    let band = divergent.iter().filter_map(|d| d.delta).max();
+    let bound = band.map(|b| b.saturating_mul(4));
+    // The batch-wide naming + the camera id (the concatenated frame
+    // list — the EXISTING discovery walk: a directory walk only, no
+    // new read class; the same contract a single pass over the
+    // combined frames would derive).
+    let mut frames: Vec<PathBuf> = Vec::new();
+    for r in roots {
+        frames.extend(
+            crate::worker::ingest::collect_dng_frames(r)
+                .map_err(|e| {
+                    format!(
+                        "profile-measure: frame discovery under {}: {e}",
+                        r.display()
+                    )
+                })?,
+        );
+    }
+    let naming = measure_naming(&frames);
+    let camera_id = match (&naming, &identity) {
+        (Some(_), Some(id)) => frames
+            .first()
+            .and_then(|p| stem_fields(p))
+            .and_then(|f| f.into_iter().next())
+            .map(|f| camera_id_of(&f, &id.model)),
+        _ => None,
+    };
+    Ok(Measurement {
+        root: mss
+            .iter()
+            .map(|m| m.root.clone())
+            .collect::<Vec<_>>()
+            .join(", "),
+        clips: mss.iter().map(|m| m.clips).sum(),
+        frames_total: mss.iter().map(|m| m.frames_total).sum(),
+        frames_by_class: class_acc.into_iter().collect(),
+        rows,
+        readouts,
+        identity,
+        naming,
+        camera_id,
+        unidentifiable,
+        unconfirmed,
+        temporal: TemporalBound {
+            divergent,
+            band,
+            bound,
+        },
+    })
+}
+/// The candidate's write (the house's user-facing artifact idiom —
+/// the hidden same-dir temp + the atomic rename, the
+/// `derived::write_manifest` / `checksums::write_sidecar` pattern:
+/// a kill mid-write never leaves a torn candidate; the explicit path
+/// only — the caller's pre-scan parent-dir check stands, no dir is
+/// created here; the leftover tmp is cleaned on the write/rename
+/// failure).
+fn write_candidate(out: &Path, content: &str) -> std::io::Result<()> {
+    let name = out
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "candidate.profile".to_string());
+    let parent = out
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let tmp = parent.join(format!(".{name}.profile-measure.tmp"));
+    if let Err(err) = std::fs::write(&tmp, content).and_then(|_| std::fs::rename(&tmp, out))
+    {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
+    Ok(())
+}
+
+/// The `Cmd::ProfileMeasure` match arm (main.rs): run the
+/// measurement + the candidate write, return the process exit code
+/// (0 = the report printed + the candidate written; 2 = the named
+/// pre-scan refusals / the discovery + the writer's named errors /
+/// the write failure — the candidate is the verb's only artifact:
+/// it is not written = the refusal band).
+pub fn run(args: &Args) -> ExitCode {
+    // The `--out`-REQUIRED usage refusal (the owner's ruling — the
+    // named line, the rc=2 band; before the first read).
+    let out = match &args.out {
+        Some(p) => p.clone(),
+        None => {
+            eprintln!("error: {}", OUT_REQUIRED_REFUSAL);
+            return ExitCode::from(2);
+        }
+    };
+    // The missing-parent-dir write refusal (no dir is created, no
+    // partial write — before the first read).
+    if !out.parent().map(|p| p.is_dir()).unwrap_or(false) {
+        eprintln!("error: {}", missing_parent_refusal(&out));
+        return ExitCode::from(2);
+    }
+    // The sources (the pre-scan band — a non-directory SOURCE is the
+    // named refusal).
+    for s in &args.source {
+        if !s.is_dir() {
+            eprintln!("error: {}", not_a_dir_refusal(s));
+            return ExitCode::from(2);
+        }
+    }
+    // The measurement (the frozen read-only pass — one source = the
+    // core's own `measure_tree`; more = the pure census merge).
+    let roots: Vec<&Path> = args.source.iter().map(|p| p.as_path()).collect();
+    let m = match measure_sources(&roots) {
+        Ok(m) => m,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+    // The report surface (stdout — the measure's output IS the
+    // report: the coverage census per readout + the class census +
+    // the divergent-tile census (the count + the band + the bound, or
+    // the named zero-case line); the UNDETERMINED arms' named lines
+    // ride the scan's note lines — the L4 report shape).
+    print!("{}", measurement_report(&m));
+    // The candidate (the L4 pure writer — the loader's inverse).
+    let cand = match candidate_profile(&m) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+    // The write (the explicit path only — the house's atomic
+    // temp+rename: a kill mid-write never leaves a torn candidate).
+    match write_candidate(&out, &cand) {
+        Ok(()) => {
+            println!(
+                "candidate profile written: {} (the measured candidate — review it, then keep it with the camera's pins to pin the camera)",
+                out.display()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("error: write {}: {err:#}", out.display());
+            ExitCode::from(2)
+        }
+    }
+}
+
+// =====================================================================
 // The KATs (the house inline pattern — the census's pins)
 // =====================================================================
 
@@ -1894,6 +2255,498 @@ mod tests {
                 m.temporal.band.expect("the band")
             )),
             "the report's bound line (the pinned form)"
+        );
+    }
+
+    // KAT-8 — the `--out`-REQUIRED usage refusal (the owner's
+    // ruling — the verbatim line + the rc=2 band; the refusal
+    // precedes the discovery walk — no source is read).
+    #[test]
+    fn profile_measure_out_required_refusal() {
+        assert_eq!(
+            OUT_REQUIRED_REFUSAL,
+            "usage: profile-measure requires --out <FILE> (the candidate profile is a reviewed artifact — the tool writes it where you say, nowhere else)",
+            "the verbatim line (the owner's ruling — the KAT's pin)"
+        );
+        let args = Args {
+            source: vec![PathBuf::from("/does-not-matter-for-the-refusal-shape")],
+            out: None,
+        };
+        assert_eq!(run(&args), ExitCode::from(2), "the rc=2 band (before any read)");
+    }
+
+    // KAT-9 — the missing-parent-dir write refusal (the named line +
+    // the rc=2 band + NO partial file + NO dir created — the
+    // pre-scan refusal, zero work) + the SOURCE-not-a-directory
+    // refusal (the same pre-scan band).
+    #[test]
+    fn profile_measure_missing_parent_refusal() {
+        let base = tmp_dir("missingparent");
+        let out = base.join("no-such-dir").join("candidate.profile");
+        assert_eq!(
+            missing_parent_refusal(&out),
+            format!(
+                "usage: profile-measure --out {}: the parent dir does not exist (the candidate profile is a reviewed artifact written to the explicit --out path only — no dir is created, no partial write)",
+                out.display()
+            ),
+            "the named line (the pinned form)"
+        );
+        let args = Args {
+            source: vec![base.clone()],
+            out: Some(out.clone()),
+        };
+        assert_eq!(run(&args), ExitCode::from(2), "the rc=2 band (before the scan — zero work)");
+        assert!(!out.exists(), "no partial file");
+        assert!(!base.join("no-such-dir").exists(), "no dir created");
+        // The SOURCE-not-a-directory refusal (the pre-scan band — the
+        // parent exists, the source does not).
+        let args2 = Args {
+            source: vec![base.join("not-a-dir")],
+            out: Some(base.join("candidate.profile")),
+        };
+        assert_eq!(run(&args2), ExitCode::from(2), "the rc=2 band (the source's named refusal)");
+        assert!(!base.join("candidate.profile").exists(), "no partial file (the source's refusal)");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // KAT-10 — the write continuity (the verb over the synthetic
+    // batch: the written file BYTE-IDENTICAL to the core's own
+    // candidate — the verb and the core agree; the atomic write
+    // leaves no hidden tmp behind).
+    #[test]
+    fn profile_measure_write_continuity() {
+        let root = tmp_dir("verbcont");
+        let (a, _) = synth_fp_frame("SIGMA", "SIGMA fp", [0; 8], false);
+        std::fs::write(root.join("FVC_001_20260101_000001.DNG"), &a).expect("the frame");
+        let outdir = tmp_dir("verbcont-out");
+        let out = outdir.join("fvc-sigma-fp.profile");
+        let args = Args {
+            source: vec![root.clone()],
+            out: Some(out.clone()),
+        };
+        assert_eq!(run(&args), ExitCode::SUCCESS, "the clean run (the report + the write)");
+        let written = std::fs::read_to_string(&out).expect("the written candidate");
+        let m = measure_tree(&root).expect("the core's own scan");
+        let cand = candidate_profile(&m).expect("the core's own writer");
+        assert_eq!(
+            written, cand,
+            "the verb's write = the core's candidate (byte-identical — the verb and the core agree)"
+        );
+        // The atomic write's cleanup (no hidden tmp left behind).
+        let leftovers: Vec<String> = std::fs::read_dir(&outdir)
+            .expect("the out dir")
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|n| n.starts_with('.') && n.ends_with(".profile-measure.tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "the hidden tmp is renamed away (no leftover)");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outdir);
+    }
+
+    // KAT-11 — the multi-root pure census merge (two roots, the same
+    // camera, two clips — the per-readout coverage census merged: the
+    // frame + clip counts summed; the class census merged; the row's
+    // frames summed + the clips 2; the naming + the camera id over
+    // the concatenated stems; the census line over the joined roots
+    // — the pinned form).
+    #[test]
+    fn profile_measure_multi_root_census_merge() {
+        let r1 = tmp_dir("mroot1");
+        let r2 = tmp_dir("mroot2");
+        let c1 = r1.join("MRA_001");
+        let c2 = r2.join("MRA_002");
+        std::fs::create_dir_all(&c1).expect("the clip dir");
+        std::fs::create_dir_all(&c2).expect("the clip dir");
+        let f1 = crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, None);
+        let f2 = crate::camera::synth_dng_frame("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, None);
+        std::fs::write(c1.join("MRA_001_20260101_000001.DNG"), &f1).expect("the frame");
+        std::fs::write(c2.join("MRA_002_20260101_000001.DNG"), &f2).expect("the frame");
+        let roots: Vec<&Path> = vec![r1.as_path(), r2.as_path()];
+        let m = measure_sources(&roots).expect("the merged measurement");
+        assert_eq!(m.frames_total, 2, "the frame total (the sum)");
+        assert_eq!(m.clips, 2, "the clip count (the per-root sum — distinct names)");
+        let classes: Vec<String> = m
+            .frames_by_class
+            .iter()
+            .map(|(c, n)| format!("{} {}", c.name(), n))
+            .collect();
+        assert_eq!(classes, vec!["raw-uncompressed 2"], "the class census (the merge)");
+        assert_eq!(m.rows.len(), 1, "one readout×depth (the merge)");
+        let r = &m.rows[0];
+        assert_eq!((r.width, r.height, r.bits), (3856, 2170, 12));
+        assert_eq!(r.predicates, vec![camera::PRED_TILE, camera::PRED_ARCHIVE]);
+        assert_eq!(r.frames, 2, "the row's frame count (the sum)");
+        assert_eq!(r.clips, 2, "the row's clip count (the merge — two distinct clips)");
+        assert_eq!(m.readouts.len(), 1);
+        assert_eq!(
+            (m.readouts[0].frames, m.readouts[0].clips),
+            (2, 2),
+            "the coverage census (the merge)"
+        );
+        let id = m.identity.as_ref().expect("the batch-uniform identity");
+        assert_eq!((id.make.as_str(), id.model.as_str()), ("SIGMA", "SIGMA fp"));
+        assert_eq!(
+            m.naming.as_deref(),
+            Some("<CLIP>_<YYYYMMDD>_<NNNNNN>.DNG"),
+            "the batch-wide naming (the concatenated stems)"
+        );
+        assert_eq!(
+            m.camera_id.as_deref(),
+            Some("mra-sigma-fp"),
+            "the footage-derived id (the first frame's first field)"
+        );
+        assert_eq!(m.temporal.bound, None, "the raw frames — no divergent tiles");
+        // The census line (the pinned form over the joined roots).
+        let report = measurement_report(&m);
+        assert!(
+            report.starts_with(&format!(
+                "profile-measure census: 2 clip(s), 2 frame(s) ({}, {})\n",
+                r1.display(),
+                r2.display()
+            )),
+            "the census line over the joined roots:\n{report}"
+        );
+        // The writer over the merged measurement (the merged counts'
+        // row shape — the structural rows' form unchanged).
+        let cand = candidate_profile(&m).expect("the writer over the merge");
+        assert!(cand.contains("camera: mra-sigma-fp\n"), "the merged camera id: {cand}");
+        assert!(
+            cand.contains("geometry: 3856 2170 12 tile,archive\n"),
+            "the merged row: {cand}"
+        );
+        let _ = std::fs::remove_dir_all(&r1);
+        let _ = std::fs::remove_dir_all(&r2);
+    }
+
+    // KAT-12 — the multi-root divergent census merge (one root's
+    // synthetic divergent batch + one root's clean synthetic batch:
+    // the merged census = the divergent root's tile only; the band
+    // the max over the MERGED census; the bound 4× — the frozen
+    // formula; the merged candidate's bound line over the merged
+    // count).
+    #[test]
+    fn profile_measure_multi_root_bound_merge() {
+        let r1 = tmp_dir("mband1");
+        let r2 = tmp_dir("mband2");
+        let c1 = r1.join("FMB_001");
+        let c2 = r2.join("FMB_002");
+        std::fs::create_dir_all(&c1).expect("the clip dir");
+        std::fs::create_dir_all(&c2).expect("the clip dir");
+        let (clean, _) = synth_fp_frame("SIGMA", "SIGMA fp", [0; 8], false);
+        let (divergent, _) = synth_fp_frame("SIGMA", "SIGMA fp", [0; 8], true);
+        std::fs::write(c1.join("FMB_001_20260101_000001.DNG"), &clean).expect("the clean frame");
+        std::fs::write(c1.join("FMB_001_20260101_000003.DNG"), &divergent).expect("the divergent frame");
+        let (a, _) = synth_fp_frame("SIGMA", "SIGMA fp", [0; 8], false);
+        let (b, _) = synth_fp_frame("SIGMA", "SIGMA fp", [0; 8], false);
+        std::fs::write(c2.join("FMB_002_20260101_000001.DNG"), &a).expect("the clean frame");
+        std::fs::write(c2.join("FMB_002_20260101_000003.DNG"), &b).expect("the clean frame");
+        let roots: Vec<&Path> = vec![r1.as_path(), r2.as_path()];
+        let m = measure_sources(&roots).expect("the merged measurement");
+        // The merged divergent census: EXACTLY the divergent root's
+        // tile (the clean root contributes nothing — the census over
+        // the batch).
+        assert_eq!(
+            m.temporal.divergent.len(),
+            1,
+            "one whole-body-divergent tile in the batch (the merged census)"
+        );
+        let d = &m.temporal.divergent[0];
+        assert_eq!(d.frame, "FMB_001/FMB_001_20260101_000003.DNG");
+        assert_eq!(d.ordinal, Some(3));
+        assert_eq!(d.tile, (0, 0), "the tile-0 prefix flip (the KAT-3 mechanism)");
+        let delta = d
+            .delta
+            .expect("the verified neighbor's same tile — the delta is measurable");
+        // The band the max over the MERGED census + the bound 4×
+        // (the frozen formula).
+        assert_eq!(m.temporal.band, Some(delta), "the band (the max over the merged census)");
+        assert_eq!(
+            m.temporal.bound,
+            Some(delta.saturating_mul(4)),
+            "the bound (the frozen 4×)"
+        );
+        // The merged candidate's bound line (over the merged count —
+        // 1 tile over the whole batch).
+        let cand = candidate_profile(&m).expect("the writer over the merge");
+        assert!(
+            cand.contains(&format!(
+                "# temporal bound: {} = 4× the measured batch divergent-tile band (max delta {} over 1 whole-body-divergent tile(s))",
+                delta * 4,
+                delta
+            )),
+            "the merged bound line (the merged count):\n{cand}"
+        );
+        // The class census (the merge over the fp frames).
+        let classes: Vec<String> = m
+            .frames_by_class
+            .iter()
+            .map(|(c, n)| format!("{} {}", c.name(), n))
+            .collect();
+        assert_eq!(
+            classes,
+            vec!["fp-camera-lossless 4"],
+            "the class census (4 fp frames over the two roots)"
+        );
+        let _ = std::fs::remove_dir_all(&r1);
+        let _ = std::fs::remove_dir_all(&r2);
+    }
+
+    // KAT-13 — the FULL-TREE A001 reproduction (the R4 UPGRADED
+    // acceptance — the corpus-conditional, the house skip pattern):
+    // the measure over the FULL original tree (the env override
+    // `FRAMEPRISM_A001_ORIGINALS_SOURCE` or the canonical worktree
+    // placement `../testdata/originals_A001` — absent both = the
+    // named skip; the fresh CI stays at the base suite line) →
+    // EVERY committed geometry row the tree covers REPRODUCED
+    // byte-identical + the EXACT candidate-vs-committed diff (the
+    // M0's MEASURED diff — the header provenance + the tool_version +
+    // the bound comment — and NOTHING else; the tree covers all 12
+    // committed rows, so the absent-row component is empty).
+    #[test]
+    fn a001_full_tree_reproduction_corpus_conditional() {
+        let canonical = Path::new("../testdata/originals_A001");
+        let root = match std::env::var("FRAMEPRISM_A001_ORIGINALS_SOURCE") {
+            Ok(p) if !p.is_empty() => PathBuf::from(p),
+            _ => canonical.to_path_buf(),
+        };
+        let present = root.join("A001_013_20260930_000001.DNG").exists()
+            || root.join("A001_013").join("A001_013_20260930_000001.DNG").exists();
+        if !present {
+            eprintln!(
+                "skip: {} (absent — the A001 full-tree corpus; the named skip, the house pattern)",
+                root.display()
+            );
+            return;
+        }
+        let committed_text =
+            std::fs::read_to_string("../profiles/a001-sigma-fp.profile")
+                .expect("the committed profile");
+        let m = measure_tree(&root).expect("the scan over the full tree");
+
+        // The batch's census (the M0's MEASURED shape — the 13-clip
+        // tree on disk (A001_001..A001_013), the 1924-frame batch:
+        // 362 fp-camera (all in A001_013) + 1562 raw-uncompressed).
+        assert_eq!(
+            m.clips, 13,
+            "the 13-clip tree (A001_001..A001_013 — the measured census)"
+        );
+        assert_eq!(m.frames_total, 1924, "the 1924-frame batch (the measured census)");
+        let class_map: std::collections::BTreeMap<&str, u64> = m
+            .frames_by_class
+            .iter()
+            .map(|(c, n)| (c.name(), *n))
+            .collect();
+        assert_eq!(
+            class_map.get("fp-camera-lossless").copied(),
+            Some(362),
+            "the 362 fp-camera frames (all in A001_013 — the L2/L4 proof's clip)"
+        );
+        assert_eq!(
+            class_map.get("raw-uncompressed").copied(),
+            Some(1562),
+            "the 1562 raw frames (the other 12 clips + A001_013's raw side)"
+        );
+
+        // THE ROW-LEVEL REPRODUCTION (the acceptance's teeth — the
+        // pin is a function of the footage): the measured row set =
+        // the committed profile's 12 rows EXACTLY — every committed
+        // row the tree covers is REPRODUCED byte-identical (the tree
+        // covers all 12 — the absent-row component of the diff is
+        // empty).
+        let committed = camera::parse_profile(&committed_text).expect("the committed profile's parse");
+        assert_eq!(
+            committed.geometries.len(),
+            12,
+            "the committed profile's 12 readout×depth rows"
+        );
+        assert_eq!(m.rows.len(), 12, "the 12 measured readout×depth rows (the measured census)");
+        let committed_row_str: Vec<String> = committed
+            .geometries
+            .iter()
+            .map(|g| {
+                format!(
+                    "geometry: {} {} {} {}",
+                    g.width, g.height, g.bits, g.predicates.join(",")
+                )
+            })
+            .collect();
+        for r in &m.rows {
+            let measured = format!(
+                "geometry: {} {} {} {}",
+                r.width, r.height, r.bits, r.predicates.join(",")
+            );
+            assert!(
+                committed_row_str.iter().any(|c| c == &measured),
+                "the measured row byte-identical to a committed row (the reproduction): {measured}"
+            );
+        }
+
+        // THE EXACT DIFF (the pinned expectation — the M0's measured
+        // diff, not a guess): the body diff = the tool_version line
+        // ONLY (0.1.0 → the current); the 12 geometry rows + the 6
+        // metadata rows present in both, byte-identical; the header
+        // diff = the provenance (the candidate's 4 header lines vs
+        // the committed's provenance block) + the candidate's bound
+        // comment (the committed header carries none).
+        let cand = candidate_profile(&m).expect("the writer over the full-tree measurement");
+        let cand_lines: Vec<&str> = cand.lines().collect();
+        let committed_lines: Vec<&str> = committed_text.lines().collect();
+        fn body_of<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+            lines.iter().copied().filter(|l| !l.starts_with('#')).collect()
+        }
+        let cand_body = body_of(&cand_lines);
+        let committed_body = body_of(&committed_lines);
+        for row in [
+            "version: 1",
+            "camera: a001-sigma-fp",
+            "make: SIGMA",
+            "model: SIGMA fp",
+            "photometric: 32803",
+            "naming: <CLIP>_<YYYYMMDD>_<NNNNNN>.DNG",
+        ] {
+            assert!(
+                cand_body.iter().any(|l| *l == row) && committed_body.iter().any(|l| *l == row),
+                "the equal body row: {row}"
+            );
+        }
+        // The geometry rows' EXACT diff (the pinned expectation — the
+        // row sets equal: the candidate's 12 measured rows = the
+        // committed's 12; the tree covers every committed row, so
+        // the absent-row component is EMPTY).
+        let cand_geom: Vec<&str> = cand_body.iter().filter(|l| l.starts_with("geometry:")).copied().collect();
+        let committed_geom: Vec<&str> = committed_body
+            .iter()
+            .filter(|l| l.starts_with("geometry:"))
+            .copied()
+            .collect();
+        assert_eq!(cand_geom.len(), 12, "the candidate's 12 geometry rows (the measured readouts)");
+        assert_eq!(committed_geom.len(), 12, "the committed's 12 geometry rows");
+        let cand_geom_set: std::collections::BTreeSet<&str> = cand_geom.iter().copied().collect();
+        let committed_geom_set: std::collections::BTreeSet<&str> =
+            committed_geom.iter().copied().collect();
+        assert_eq!(
+            cand_geom_set, committed_geom_set,
+            "the geometry row sets equal — every committed row the tree covers REPRODUCED byte-identical (the absent-row component empty)"
+        );
+        // The tool_version (the body diff's ONLY component — the
+        // writer's current version vs the committed 0.1.0) + the
+        // body's exact shape (nothing else differs).
+        let tv = format!("tool_version: {}", env!("CARGO_PKG_VERSION"));
+        assert!(
+            cand_body.iter().any(|l| *l == tv.as_str()),
+            "the candidate's tool_version (the diff's metadata component)"
+        );
+        assert!(
+            committed_body.iter().any(|l| *l == "tool_version: 0.1.0"),
+            "the committed 0.1.0 (the diff's metadata component)"
+        );
+        assert_eq!(
+            cand_body.len(),
+            19,
+            "the candidate's body: 7 metadata + 12 geometry (nothing else)"
+        );
+        assert_eq!(
+            committed_body.len(),
+            19,
+            "the committed's body: 7 metadata + 12 geometry (nothing else)"
+        );
+        let equal_body = [
+            "version: 1",
+            "camera: a001-sigma-fp",
+            "make: SIGMA",
+            "model: SIGMA fp",
+            "photometric: 32803",
+            "naming: <CLIP>_<YYYYMMDD>_<NNNNNN>.DNG",
+        ];
+        let cand_other: Vec<&str> = cand_body
+            .iter()
+            .copied()
+            .filter(|l| !l.starts_with("geometry:") && *l != tv.as_str() && !equal_body.contains(l))
+            .collect();
+        assert!(
+            cand_other.is_empty(),
+            "no other candidate body row (the body diff = the tool_version only): {cand_other:?}"
+        );
+
+        // The header (the diff's provenance + bound components): the
+        // candidate's 4 header lines (the magic + the id line + the
+        // batch line + the bound line) over the MEASURED values (the
+        // band 28, the bound 112, the 3 tiles); the committed header
+        // carries NO bound line (the committed pin itself is
+        // bound-less — the norm).
+        let cand_header: Vec<&str> = cand_lines.iter().copied().take_while(|l| l.starts_with('#')).collect();
+        assert_eq!(
+            cand_header.len(),
+            4,
+            "the candidate's header: the magic + 3 provenance lines"
+        );
+        assert_eq!(cand_header[0], camera::PROFILE_MAGIC, "the magic line (line 1)");
+        assert_eq!(
+            cand_header[1],
+            format!("# a001-sigma-fp — written FROM the measurement (frameprism profile-measure {})", env!("CARGO_PKG_VERSION")),
+            "the id line (the writer's frozen form over the footage-derived id)"
+        );
+        assert_eq!(
+            cand_header[2],
+            "# the measured batch: 13 clip(s), 1924 frame(s)",
+            "the batch line (the measured census)"
+        );
+        assert_eq!(
+            cand_header[3],
+            "# temporal bound: 112 = 4× the measured batch divergent-tile band (max delta 28 over 3 whole-body-divergent tile(s)) — the item-124 class (the tool's pinned constant FP_TEMPORAL_MAX_DELTA = 256 stands for the pinned path)",
+            "the bound line (the measured values — the diff's bound component)"
+        );
+        assert!(
+            !committed_lines.iter().any(|l| l.starts_with("# temporal bound:")),
+            "the committed header carries NO bound line (the diff's bound component)"
+        );
+
+        // The divergent census (the batch's 3 corpus-divergent
+        // tiles — all in A001_013, the L2/L4 proof's clip): the
+        // measured band 28 → the bound 112 (the 4× house rule).
+        assert_eq!(
+            m.temporal.divergent.len(),
+            3,
+            "the 3 corpus-divergent tiles (the L2/L4 proof's census)"
+        );
+        let tiles: Vec<(u64, (u32, u32))> = m
+            .temporal
+            .divergent
+            .iter()
+            .map(|d| (d.ordinal.expect("the ordinal"), d.tile))
+            .collect();
+        assert_eq!(
+            tiles,
+            vec![(277, (5, 4)), (287, (0, 5)), (395, (5, 4))],
+            "the divergent tiles (the L2/L4 proof's exact census)"
+        );
+        assert!(
+            m.temporal
+                .divergent
+                .iter()
+                .all(|d| d.frame.starts_with("A001_013/")),
+            "the divergent tiles are all in A001_013 (the fp-camera clip)"
+        );
+        assert!(
+            m.temporal
+                .divergent
+                .iter()
+                .all(|d| d.delta.is_some()),
+            "each divergent tile's verified neighbor — the delta is measurable"
+        );
+        assert_eq!(m.temporal.band, Some(28), "the band (the measured max delta — the L4 proof's value)");
+        assert_eq!(
+            m.temporal.bound,
+            Some(112),
+            "the bound (4× the band — the house rule)"
+        );
+        // The report's bound line (the pinned form over the batch).
+        assert!(
+            measurement_report(&m).contains(
+                "temporal bound: 112 = 4× the measured batch divergent-tile band (max delta 28 over 3 whole-body-divergent tile(s))"
+            ),
+            "the report's bound line (the pinned form over the measured batch)"
         );
     }
 }

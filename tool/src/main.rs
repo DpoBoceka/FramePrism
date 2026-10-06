@@ -201,6 +201,20 @@ enum Cmd {
     /// Verify a signed reel manifest (sha256 + key identity +
     /// signature).
     Verify(frameprism::provenance::VerifyArgs),
+    /// Measure the camera's structural constants over a batch of its
+    /// footage (the bounded-read scan — read-only over the sources:
+    /// one or more trees of clips, a camera batch can span dirs) +
+    /// write the candidate profile to --out for review (the measure →
+    /// review → pin onboarding — the candidate is a reviewed
+    /// artifact: --out <FILE> is REQUIRED, the tool writes it where
+    /// you say, nowhere else; the parent dir must exist — a missing
+    /// parent is the named refusal, no partial write). The report
+    /// (the coverage census + the class census + the divergent-tile
+    /// bound — or the named zero-case line) is the stdout surface;
+    /// the measured rows are the footage's (the pin is a function of
+    /// the footage): review the candidate, keep it with the camera's
+    /// pins to pin the camera.
+    ProfileMeasure(frameprism::measure::Args),
 }
 
 fn main() -> ExitCode {
@@ -406,6 +420,10 @@ fn main() -> ExitCode {
             // mint).
             Cmd::Sign(args) => frameprism::provenance::run_sign(&args),
             Cmd::Verify(args) => frameprism::provenance::run_verify(&args),
+            // The profile-measure verb (the measure → review → pin
+            // onboarding — the read-only measurement + the candidate
+            // write to the explicit --out path only).
+            Cmd::ProfileMeasure(args) => frameprism::measure::run(&args),
         };
     }
 
