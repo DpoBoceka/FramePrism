@@ -201,6 +201,20 @@ enum Cmd {
     /// Verify a signed reel manifest (sha256 + key identity +
     /// signature).
     Verify(frameprism::provenance::VerifyArgs),
+    /// Measure the camera's structural constants over a batch of its
+    /// footage (the bounded-read scan — read-only over the sources:
+    /// one or more trees of clips, a camera batch can span dirs) +
+    /// write the candidate profile to --out for review (the measure →
+    /// review → pin onboarding — the candidate is a reviewed
+    /// artifact: --out <FILE> is REQUIRED, the tool writes it where
+    /// you say, nowhere else; the parent dir must exist — a missing
+    /// parent is the named refusal, no partial write). The report
+    /// (the coverage census + the class census + the divergent-tile
+    /// bound — or the named zero-case line) is the stdout surface;
+    /// the measured rows are the footage's (the pin is a function of
+    /// the footage): review the candidate, keep it with the camera's
+    /// pins to pin the camera.
+    ProfileMeasure(frameprism::measure::Args),
 }
 
 fn main() -> ExitCode {
@@ -406,6 +420,10 @@ fn main() -> ExitCode {
             // mint).
             Cmd::Sign(args) => frameprism::provenance::run_sign(&args),
             Cmd::Verify(args) => frameprism::provenance::run_verify(&args),
+            // The profile-measure verb (the measure → review → pin
+            // onboarding — the read-only measurement + the candidate
+            // write to the explicit --out path only).
+            Cmd::ProfileMeasure(args) => frameprism::measure::run(&args),
         };
     }
 
@@ -679,6 +697,12 @@ fn main() -> ExitCode {
     // grids it is accepted-but-inert by construction, the ds2x rows
     // keep the trial default).
     frameprism::worker::set_trial_flag(cli.trial);
+    // The `--pinned-only` NAMED opt-in (the strict posture — the
+    // unpinned fallback's refusal: the encode gate's UNPINNED entry
+    // reads it; absent = the default-off unpinned fallback stands;
+    // the PINNED path never reads it — a pin present + matching =
+    // unchanged).
+    frameprism::camera::set_pinned_only(cli.pinned_only);
     if matches!(cli.codec, CodecArg::J92 | CodecArg::Both) {
         let _ = frameprism::status::open();
     }
@@ -1067,5 +1091,26 @@ mod tests {
                 "{name}: blocklist `DIT` (word-boundary) matched — reword the text, never this test"
             );
         }
+    }
+
+    /// The `--pinned-only` help line (the L3 surface — R1): the
+    /// rendered `--help`'s Options section carries the flag's line
+    /// VERBATIM (the house one-line flag-description idiom — the KAT
+    /// pins it; the lane's before/after sha pair proves the `--help`
+    /// surface changes EXACTLY by this line). The parse proof (the
+    /// H2 idiom — the parse level only): default off, the flag parses
+    /// on.
+    #[test]
+    fn encode_help_pins_the_pinned_only_flag_line() {
+        use clap::CommandFactory;
+        let help = Cli::command().render_long_help().to_string();
+        assert!(
+            help.contains("      --pinned-only\n          Strict posture: refuse the unpinned fallback (the self-described encode) — when no camera profile resolves and the frames would otherwise encode unpinned, the run is the named refusal (rc=2 before any frame). Absent (default) = the unpinned fallback stands; a pin present + matching = the PINNED path, unchanged (the flag is inert)"),
+            "the rendered --pinned-only help line (verbatim — the doc comment's rendering)"
+        );
+        let parsed = Cli::try_parse_from(["frameprism"]).unwrap();
+        assert!(!parsed.pinned_only, "default off — the unpinned fallback stands");
+        let parsed = Cli::try_parse_from(["frameprism", "--pinned-only"]).unwrap();
+        assert!(parsed.pinned_only, "the strict posture is ON");
     }
 }

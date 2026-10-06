@@ -194,8 +194,20 @@ const TILE_H_FRAME_2K: u32 = 1344;
 const TILE_W_FRAME_3K: u32 = 3024;
 const TILE_H_FRAME_3K: u32 = 2010;
 
+/// The tile-layout geometry (the predicate's PURE core — the data
+/// source: the frame's IFD0-derived width/height/bits, the tags 256/
+/// 257/258 — the SAME values the camera identity's `FrameIdentity`
+/// carries from the pre-pass's `read_meta`: the unpinned confirmation
+/// tests the geometry from the already-parsed header, no second read,
+/// no pixel data). The Frame-based predicate below delegates to it
+/// (the routing layer's behavior is the shipped one — the A001-layout
+/// frame → the reference-product-structure tile encoder).
+pub(crate) fn is_tile_geometry(width: u32, height: u32, bits_per_sample: u16) -> bool {
+    width == TILE_W_FRAME && height == TILE_H_FRAME && bits_per_sample == 12
+}
+
 fn is_tile_layout(frame: &crate::tiff::Frame) -> bool {
-    frame.width == TILE_W_FRAME && frame.height == TILE_H_FRAME && frame.bits_per_sample == 12
+    is_tile_geometry(frame.width, frame.height, frame.bits_per_sample)
 }
 
 /// Native-depth archive eligibility: the fp's four readout geometries
@@ -219,14 +231,42 @@ fn is_tile_layout(frame: &crate::tiff::Frame) -> bool {
 /// passes this predicate and resolves to the archive layout at the camera
 /// gate; a genuinely unprofiled combination is refused there as the named
 /// class-3 unmeasured-depth mismatch).
-pub(crate) fn is_archive_layout(frame: &crate::tiff::Frame) -> bool {
+/// The archive-layout geometry (the predicate's PURE core — the
+/// native-depth archive eligibility over the fp's four readout
+/// geometries at the three native depths; the Frame-based predicate
+/// below delegates to it — the same no-second-read / no-pixel-data
+/// data source as `is_tile_geometry`).
+pub(crate) fn is_archive_geometry(width: u32, height: u32, bits_per_sample: u16) -> bool {
     matches!(
-        (frame.width, frame.height),
+        (width, height),
         (TILE_W_FRAME, TILE_H_FRAME)
             | (TILE_W_FRAME_FHD, TILE_H_FRAME_FHD)
             | (TILE_W_FRAME_2K, TILE_H_FRAME_2K)
             | (TILE_W_FRAME_3K, TILE_H_FRAME_3K)
-    ) && matches!(frame.bits_per_sample, 8 | 10 | 12)
+    ) && matches!(bits_per_sample, 8 | 10 | 12)
+}
+
+pub(crate) fn is_archive_layout(frame: &crate::tiff::Frame) -> bool {
+    is_archive_geometry(frame.width, frame.height, frame.bits_per_sample)
+}
+
+/// The unpinned structure confirmation (the arc B L1 — R2): the
+/// SHIPPED predicates as CONFIRMERS, tested against the frame's own
+/// geometry (the frame data the encode path already reads before
+/// routing — the pre-pass's `read_meta` carries the same IFD0 tags
+/// 256/257/258; no new structural constant, no pixel data). Returns
+/// the confirming predicate's name (the profile's `tile` / `archive`
+/// vocabulary — the `PRED_TILE` / `PRED_ARCHIVE` names, the canonical
+/// tile-then-archive order the profile's geometry rows use) or `None`
+/// = no predicate confirms (the UNDETERMINED arm 2).
+pub(crate) fn confirm_layout(width: u32, height: u32, bits_per_sample: u16) -> Option<&'static str> {
+    if is_tile_geometry(width, height, bits_per_sample) {
+        Some(crate::camera::PRED_TILE)
+    } else if is_archive_geometry(width, height, bits_per_sample) {
+        Some(crate::camera::PRED_ARCHIVE)
+    } else {
+        None
+    }
 }
 
 /// The encoded frame at the buffer seam: the surgery output
@@ -2864,6 +2904,114 @@ mod tests {
             assert_eq!(is_tile_layout(&frame), tile, "is_tile_layout {w}x{h} @{bps}");
             assert_eq!(is_archive_layout(&frame), archive, "is_archive_layout {w}x{h} @{bps}");
         }
+    }
+
+    /// The unpinned confirmation matrix (the arc B L1 — R2): the
+    /// shipped predicates as CONFIRMERS over the SAME geometry rows
+    /// the routing KAT pins — the tile layout confirms `tile` (the
+    /// shipped pair), every other archive geometry × native depth
+    /// confirms `archive`, the foreign geometry confirms NOTHING
+    /// (the UNDETERMINED arm 2's `None`). The confirmation rides the
+    /// SAME geometry the Frame-based predicates test (the delegation
+    /// — the router and the confirmer cannot drift).
+    #[test]
+    fn unpinned_confirm_layout_matrix() {
+        for (w, h, bps, want) in [
+            (3856u32, 2170u32, 12u16, Some("tile")),
+            (3856u32, 2170u32, 10, Some("archive")),
+            (3856u32, 2170u32, 8, Some("archive")),
+            (1936u32, 1090u32, 12, Some("archive")),
+            (1936u32, 1090u32, 8, Some("archive")),
+            (2016u32, 1344u32, 12, Some("archive")),
+            (2016u32, 1344u32, 10, Some("archive")),
+            (2016u32, 1344u32, 8, Some("archive")),
+            (3024u32, 2010u32, 12, Some("archive")),
+            (3024u32, 2010u32, 10, Some("archive")),
+            (3024u32, 2010u32, 8, Some("archive")),
+            (1024u32, 768u32, 12, None),
+        ] {
+            let got = confirm_layout(w, h, bps);
+            assert_eq!(got, want, "confirm_layout {w}x{h} @{bps}");
+        }
+        // The delegation parity (the Frame-based predicate and the
+        // geometry core agree on a real parsed frame):
+        let frame = crate::tiff::read(&crate::camera::synth_dng_frame(
+            "SIGMA", "SIGMA fp", 3856, 2170, 12, 32803, Some([0u8; 8]),
+        ))
+        .expect("the synthetic UHD-12 frame must parse");
+        assert!(is_tile_layout(&frame));
+        assert_eq!(
+            confirm_layout(frame.width, frame.height, frame.bits_per_sample),
+            Some(crate::camera::PRED_TILE)
+        );
+    }
+
+    /// The unpinned run's routing decisions (the arc B L2 — R3): the
+    /// routing is the predicates' — the pure decision chain (the
+    /// identity's structure → the class → the policy verdict) never
+    /// consults the profile (absent in the unpinned run), so the
+    /// unpinned frame routes to the SAME existing paths as the
+    /// pinned one: the RAW identity → the raw path (the `Encode`
+    /// verdict — the bit-exact round-trip encode, byte-identical to
+    /// the pinned raw path — the L1 A/B's frame level pinned here at
+    /// the decision's pure-fn level), the FP identity → the
+    /// transcode path (the `Transcode` verdict — the full round-
+    /// trip: the default path's decode contract + the transcode
+    /// fidelity check, which run regardless of the verify flag — the
+    /// L24 note — + the L1 seam's forced verify; the temporal-oracle
+    /// ctx is the profile's — absent unpinned, the strict drill
+    /// stands — the R1 strict line's routing side).
+    #[test]
+    fn kat_unpinned_routing_decisions() {
+        use crate::frameclass as fc;
+        // The raw identity (the stock raw structure — compression 1,
+        // strip layout, the UHD-12 geometry): classifies the raw
+        // class → the `Encode` verdict (the raw path — carry-
+        // invariant, byte-identical to the pinned raw path).
+        let raw = fc::FrameStructure {
+            compression: Some(1),
+            width: Some(3856),
+            height: Some(2170),
+            bits_per_sample: Some(12),
+            tile_width: None,
+            tile_height: None,
+            tile_count: None,
+            tiled: false,
+        };
+        assert_eq!(
+            fc::classify_structure(&raw),
+            fc::FrameClass::RawUncompressed,
+            "the raw identity classifies the raw class (the classifier's compression-1/strip arm)"
+        );
+        assert_eq!(
+            policy(fc::FrameClass::RawUncompressed, Mode::Lossless, false, false),
+            FramePolicy::Encode,
+            "the raw identity routes the raw path (the Encode verdict — the profile never enters the chain; the routing is the predicates')"
+        );
+        // The fp identity (the measured fingerprint — compression 7,
+        // the 512×368 × 48 tile structure on 3856×2170 @ 12-bit):
+        // classifies the fp class → the `Transcode` verdict (the
+        // default — the carry opt-in OFF; the full round-trip).
+        let fp = fc::FrameStructure {
+            compression: Some(7),
+            width: Some(3856),
+            height: Some(2170),
+            bits_per_sample: Some(12),
+            tile_width: Some(512),
+            tile_height: Some(368),
+            tile_count: Some(48),
+            tiled: true,
+        };
+        assert_eq!(
+            fc::classify_structure(&fp),
+            fc::FrameClass::FpCameraLossless,
+            "the fp identity classifies the fp-camera class (the measured fingerprint — zero-drift)"
+        );
+        assert_eq!(
+            policy(fc::FrameClass::FpCameraLossless, Mode::Lossless, false, false),
+            FramePolicy::Transcode,
+            "the fp identity routes the transcode path (the Transcode verdict — the full round-trip; the temporal ctx stays absent unpinned — the strict drill stands)"
+        );
     }
 
     /// The Open Gate 2K grid geometry (the `tileenc` surface,

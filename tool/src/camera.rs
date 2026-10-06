@@ -24,10 +24,21 @@
 //! the encode output for A001 frames stays byte-identical). The gate
 //! sits AHEAD of the routing; it never rewrites it.
 //!
-//! The FROZEN posture stays the default: an unknown camera = the named
-//! refusal (rc=2 at the encode surface — the tool does not encode
-//! without its camera identity resolved; the profile is an explicit
-//! identity, not an opt-in to new behavior).
+//! The posture (the arc B amendment, 2026-10-05): a RESOLVABLE profile
+//! set = the PINNED path (today's behavior, byte-frozen — the frozen
+//! oracle class, the temporal-bound acceptance, the mismatch classes
+//! 1-4 — the pin stays authority when it is present). NO pin present
+//! at all (the set unresolvable — the `(probed: )` class; a present-
+//! but-corrupt pin keeps its own named refusal) = the UNPINNED mode
+//! when the frame SELF-DESCRIBES (this module's file-side identity
+//! read — `identity_from_ifd0` — generalized to the primary identity
+//! source) and a shipped routing predicate CONFIRMS the structure
+//! (`worker::encode::confirm_layout` — the predicates as confirmers):
+//! the encode proceeds through the existing raw/transcode paths (the
+//! ANNOUNCE line once at encode start, the verify forced ON, no
+//! temporal acceptance); otherwise the UNDETERMINED named refusal
+//! (the arm per the missing half — the tool refuses when it cannot
+//! CONFIRM, not when it cannot find a pin).
 //!
 //! Resolution (the pins pattern — `crate::pins::resolve_pins_path`):
 //! the `FRAMEPRISM_PROFILES` env (an explicit profile FILE path, the
@@ -719,6 +730,149 @@ pub fn resolve(set: &ProfileSet, id: &FrameIdentity) -> Resolution {
         profile_version: p.version,
         predicates: depth[0].predicates.clone(),
     }
+}
+
+// =====================================================================
+// The self-describing encode gate (the UNPINNED mode — the arc B L1)
+// =====================================================================
+
+/// The no-pin-present-at-all resolution class marker (the unpinned
+/// gate's entry condition): ONLY the "no candidate resolved" class
+/// carries it (the pins-pattern `probed:` shape — the resolution
+/// refusal that lists the probed candidates). The present-but-corrupt
+/// pin classes (the named env-file-not-a-file / parse / dir refusals)
+/// do NOT — they keep today's named refusals (the pin stays authority
+/// when it is present; a broken pin is never silently bypassed).
+pub const UNRESOLVABLE_PROBED: &str = "camera profile set unresolvable (probed: ";
+
+/// The UNDETERMINED arm-1 named line (the L1 contract — verbatim):
+/// no camera identity (the file's Make/Model is absent or unreadable)
+/// and no pin — the tool does not encode what it cannot identify.
+pub const UNDETERMINED_ARM1: &str = "refusal: no camera identity (the file's Make/Model is absent or unreadable) and no pin — the tool does not encode what it cannot identify (the named rc=2; a measured profile file names the camera)";
+
+/// The UNDETERMINED arm-2 named line (the L1 contract — verbatim,
+/// the offending identity filled): the identity is self-described but
+/// no routing predicate confirms the structure — the tool does not
+/// encode what it cannot confirm.
+pub fn undetermined_arm2_line(ident: &FrameIdentity) -> String {
+    format!(
+        "refusal: camera {} {} {}x{} @{}-bit is self-described but no tile/archive layout confirms against the frame's structure — the tool does not encode what it cannot confirm (the named rc=2; a measured profile file pins the layout)",
+        ident.make, ident.model, ident.width, ident.height, ident.bits_per_sample
+    )
+}
+
+/// The `--pinned-only` NAMED refusal (the L3 contract — verbatim, the
+/// tests pin it): the strict posture is ON + no pin resolves + the
+/// frames WOULD enter the UNPINNED mode (the file self-describes + a
+/// predicate confirms — the L1 gate's entry point) → the named rc=2
+/// BEFORE any frame (the pre-job class — the refusal fires at the
+/// gate; nothing is written, the frames are not touched). A pin
+/// present + matching = the PINNED path, UNCHANGED (the flag is
+/// inert); the UNDETERMINED arms = the existing named lines,
+/// UNCHANGED (their wording already says "and no pin" — accurate
+/// under the flag).
+pub const PINNED_ONLY_REFUSAL: &str = "refusal: --pinned-only (the strict posture) is on — no pin resolves, and the unpinned fallback is disabled (encode with the flag removed, or supply the measured profile file)";
+
+/// The UNPINNED mode's run state (the run's camera-identity mode —
+/// the process-wide slot the run report's unpinned block + the
+/// effective-verify surfaces read, the `pins::set_current` pattern's
+/// run-scope form: set at the encode gate's decision, persistent for
+/// the process — a CLI process runs ONE encode; the test-only clear
+/// below resets the slot for the KATs). No wall clock (the report's
+/// determinism contract — the identity is the run's own computation).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnpinnedMode {
+    /// The run's self-described identity (the FIRST frame's — the
+    /// deterministic sample, the audit's v1 precedent; every frame of
+    /// the run is confirmed against its OWN identity by the pre-pass).
+    pub identity: FrameIdentity,
+    /// The confirming predicate that held against the first frame's
+    /// structure (the `PRED_TILE` / `PRED_ARCHIVE` name — the R2
+    /// confirmation record: which predicate held, tile / archive).
+    pub predicate: &'static str,
+}
+
+impl UnpinnedMode {
+    /// The ANNOUNCE line (the L1 contract — verbatim): ONCE per run,
+    /// at encode start, the live stdout line + the report line (the
+    /// run report's unpinned block carries the same line).
+    pub fn announce_line(&self) -> String {
+        format!(
+            "unpinned encode: {} {} {}x{} @{}-bit (self-described; no pin — verify-on, no temporal acceptance; to pin this camera: the measured profile file)",
+            self.identity.make, self.identity.model, self.identity.width, self.identity.height, self.identity.bits_per_sample
+        )
+    }
+    /// The report's confirmation line (R2 — which predicate held — the
+    /// census shape, the house pattern): the run's report-line surface
+    /// records the confirmation result, not only the mode.
+    pub fn confirmation_line(&self) -> String {
+        format!(
+            "unpinned confirmation: {} (the shipped predicate that holds against the frame's own structure — the routing is the predicate's)",
+            self.predicate
+        )
+    }
+}
+
+static UNPINNED: std::sync::Mutex<Option<UnpinnedMode>> = std::sync::Mutex::new(None);
+
+/// Set the run's unpinned mode (the process_dir gate decision — the
+/// encode start). Process-wide + persistent (the `CARRY_FLAG` /
+/// `pins::set_current` precedent — the run report + the TSV / summary
+/// surfaces read it AFTER the run completes).
+pub fn set_unpinned_mode(mode: UnpinnedMode) {
+    *UNPINNED.lock().unwrap() = Some(mode);
+}
+
+/// The run's unpinned mode (`None` = the pinned path — a resolvable
+/// profile set — or a non-encode caller): the run report's unpinned
+/// block + the effective-verify surfaces read it.
+pub fn unpinned_mode() -> Option<UnpinnedMode> {
+    UNPINNED.lock().unwrap().clone()
+}
+
+/// The run's EFFECTIVE verify (the R4 honesty surfaces — the TSV's
+/// verify column + the summary's verify field record what ACTUALLY
+/// ran, not the flag's raw value): the CLI's `--verify` flag OR the
+/// unpinned mode (the self-describing encode gate forces the verify
+/// ON at the seam — the unpinned run's round-trip pass is
+/// unconditional; the flag's value is the input, the effective value
+/// is the record). The PINNED path = the slot absent = the flag's
+/// value (byte-identical — the surfaces stand pre-L1).
+pub fn effective_verify(flag: bool) -> bool {
+    flag || unpinned_mode().is_some()
+}
+
+/// Test-only: the slot's KAT lock (the unpinned-slot KATs across the
+/// crate's modules serialize on it — the process-wide slot's parallel-
+/// test hazard, the `ENV_LOCK` pattern) + the slot reset (the KATs
+/// clear it between the set/absent assertions — a production process
+/// never calls the clear).
+#[cfg(test)]
+pub static UNPINNED_SLOT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub fn clear_unpinned_mode_for_tests() {
+    *UNPINNED.lock().unwrap() = None;
+}
+
+/// The `--pinned-only` strict-posture flag (the L3 surface — R1): the
+/// process-wide slot the CLI's run-entry site sets (the `set_trial_flag`
+/// CARRY_FLAG pattern — a CLI process runs ONE encode); the encode
+/// gate's UNPINNED entry reads it (the refusal branch). Default OFF —
+/// absent = the unpinned fallback stands (the L1/L2 default behavior);
+/// the PINNED path never reads it (a pin present + matching = the flag
+/// is inert by construction).
+static PINNED_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the `--pinned-only` flag (the CLI's run-entry site, before the
+/// dispatch).
+pub fn set_pinned_only(flag: bool) {
+    PINNED_ONLY.store(flag, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the `--pinned-only` flag (the encode gate's UNPINNED entry).
+pub fn pinned_only() -> bool {
+    PINNED_ONLY.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 // =====================================================================
@@ -2325,5 +2479,184 @@ geometry: 3024 2010 8 archive
             }
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // ---- the self-describing encode gate (the UNPINNED mode — L1) ----
+
+    /// The ANNOUNCE line's exact verbatim (the L1 contract — the
+    /// spec's filled example, byte-exact: the test pins the line the
+    /// unpinned run prints ONCE at encode start + records in the run
+    /// report's unpinned block).
+    #[test]
+    fn unpinned_announce_line_is_the_verbatim_contract() {
+        let mode = UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        };
+        assert_eq!(
+            mode.announce_line(),
+            "unpinned encode: SIGMA SIGMA fp 3856x2170 @12-bit (self-described; no pin — verify-on, no temporal acceptance; to pin this camera: the measured profile file)"
+        );
+    }
+
+    /// UNDETERMINED arm 1's exact verbatim (the L1 contract — the
+    /// no-identity + no-pin refusal, rc=2 before any frame).
+    #[test]
+    fn undetermined_arm1_line_is_the_verbatim_contract() {
+        assert_eq!(
+            UNDETERMINED_ARM1,
+            "refusal: no camera identity (the file's Make/Model is absent or unreadable) and no pin — the tool does not encode what it cannot identify (the named rc=2; a measured profile file names the camera)"
+        );
+    }
+
+    /// UNDETERMINED arm 2's exact verbatim (the L1 contract — the
+    /// self-described-but-unconfirmed refusal, the offending identity
+    /// filled, rc=2 before any frame).
+    #[test]
+    fn undetermined_arm2_line_is_the_verbatim_contract() {
+        assert_eq!(
+            undetermined_arm2_line(&ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803)),
+            "refusal: camera SIGMA SIGMA fp 3856x2170 @12-bit is self-described but no tile/archive layout confirms against the frame's structure — the tool does not encode what it cannot confirm (the named rc=2; a measured profile file pins the layout)"
+        );
+    }
+
+    /// The R2 confirmation record (the report-line surface — the
+    /// census shape): the line names the predicate that held
+    /// (tile / archive — the `PRED_*` vocabulary), deterministic
+    /// (no wall clock), distinct per predicate.
+    #[test]
+    fn unpinned_confirmation_line_names_the_predicate() {
+        let tile = UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        };
+        assert_eq!(
+            tile.confirmation_line(),
+            "unpinned confirmation: tile (the shipped predicate that holds against the frame's own structure — the routing is the predicate's)"
+        );
+        let archive = UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 1936, 1090, 10, 32803),
+            predicate: PRED_ARCHIVE,
+        };
+        assert_eq!(
+            archive.confirmation_line(),
+            "unpinned confirmation: archive (the shipped predicate that holds against the frame's own structure — the routing is the predicate's)"
+        );
+    }
+
+    /// The unpinned-mode slot's lifecycle (the process-wide slot the
+    /// run report + the effective-verify surfaces read — set at the
+    /// gate decision, read back, cleared for the next KAT; the slot
+    /// lock serializes the crate's unpinned-slot KATs — the
+    /// parallel-test hazard, the `ENV_LOCK` pattern).
+    #[test]
+    fn unpinned_mode_slot_set_get_clear() {
+        let _g = UNPINNED_SLOT_LOCK.lock().expect("slot lock");
+        clear_unpinned_mode_for_tests();
+        assert!(unpinned_mode().is_none(), "the cleared slot reads None");
+        set_unpinned_mode(UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        });
+        let got = unpinned_mode().expect("the set slot reads back");
+        assert_eq!(got.predicate, PRED_TILE);
+        assert_eq!(got.identity.make, "SIGMA");
+        assert_eq!(got.identity.model, "SIGMA fp");
+        assert_eq!((got.identity.width, got.identity.height, got.identity.bits_per_sample), (3856, 2170, 12));
+        assert!(unpinned_mode().unwrap().announce_line().starts_with("unpinned encode: SIGMA SIGMA fp "));
+        clear_unpinned_mode_for_tests();
+        assert!(unpinned_mode().is_none(), "the test clear resets the slot");
+    }
+
+    /// The effective-verify honesty (the arc B L1 — R4): the
+    /// record surfaces (the TSV's verify column + the summary's
+    /// verify field) carry the EFFECTIVE verify — the flag OR the
+    /// unpinned forced-on — not the flag's raw value. The PINNED
+    /// path (the slot absent) = the flag's value (byte-identical —
+    /// the surfaces stand pre-L1); the UNPINNED run = on regardless
+    /// of the flag (the round-trip pass is unconditional there).
+    #[test]
+    fn effective_verify_records_the_unpinned_forced_on() {
+        let _g = UNPINNED_SLOT_LOCK.lock().expect("slot lock");
+        clear_unpinned_mode_for_tests();
+        assert!(!effective_verify(false), "the pinned run: the flag's value (off)");
+        assert!(effective_verify(true), "the pinned run: the flag's value (on)");
+        set_unpinned_mode(UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        });
+        assert!(effective_verify(false), "the unpinned run: forced on, the flag off");
+        assert!(effective_verify(true), "the unpinned run: forced on, the flag on");
+        clear_unpinned_mode_for_tests();
+        assert!(!effective_verify(false), "the cleared slot: the pinned shape stands");
+    }
+
+    /// The verify contract's INESCAPABILITY (the arc B L2 — R2):
+    /// the unpinned run's effective verify is ON regardless of the
+    /// flag state, and the CLI surface exposes NO way to request
+    /// verify off (`--verify` is the only verify flag — the opt-in;
+    /// no `--no-verify` exists — the flag surface is L3's territory,
+    /// untouched in L2: the `--help` surface is byte-identical). The
+    /// guard has no off switch: the `--no-verify` refusal line (the
+    /// contract line: `refusal: --no-verify is refused for an
+    /// unpinned encode (the round-trip verify is the unpinned
+    /// output's only falsifiability — the guard is not escapable)`)
+    /// is CONTRACT-RESERVED — it lands with the flag in L3's surface
+    /// ruling (the named residual — no flag is invented in L2). This
+    /// KAT pins the inescapability's observable: flag OFF + unpinned
+    /// = effective verify ON (the guard's only state), and the force
+    /// is the UNPINNED mode's — never a default (the pinned path =
+    /// the flag's value, byte-identical — no derived verify).
+    #[test]
+    fn verify_contract_unpinned_inescapable() {
+        let _g = UNPINNED_SLOT_LOCK.lock().expect("slot lock");
+        clear_unpinned_mode_for_tests();
+        set_unpinned_mode(UnpinnedMode {
+            identity: ident("SIGMA", "SIGMA fp", 3856, 2170, 12, 32803),
+            predicate: PRED_TILE,
+        });
+        assert!(
+            effective_verify(false),
+            "the unpinned run: flag OFF → effective verify ON (the guard has no off switch — the CLI surface exposes no verify-off request; the --no-verify refusal is contract-reserved for L3's flag)"
+        );
+        assert!(
+            effective_verify(true),
+            "the unpinned run: flag ON → effective verify ON (the flag is the opt-in; the unpinned force is the floor)"
+        );
+        clear_unpinned_mode_for_tests();
+        assert!(
+            !effective_verify(false),
+            "the pinned run (the slot absent): the flag's value (off) — the force is the UNPINNED mode's, never a default (no derived verify — the strict posture stands where the mode stands)"
+        );
+    }
+
+    /// The `--pinned-only` NAMED refusal's exact verbatim (the L3
+    /// contract — R1): the strict posture is ON + no pin resolves +
+    /// the frames WOULD enter the UNPINNED mode → the named rc=2
+    /// before any frame (the pre-job class — the refusal fires at the
+    /// gate; nothing is written, the frames are not touched).
+    #[test]
+    fn pinned_only_refusal_line_is_the_verbatim_contract() {
+        assert_eq!(
+            PINNED_ONLY_REFUSAL,
+            "refusal: --pinned-only (the strict posture) is on — no pin resolves, and the unpinned fallback is disabled (encode with the flag removed, or supply the measured profile file)"
+        );
+    }
+
+    /// The flag's slot lifecycle (the L3 contract — R1): default OFF
+    /// (the unpinned fallback stands absent — the L1/L2 default
+    /// behavior), set ON + read back, reset OFF for the sibling KATs
+    /// (the KATs never leak the flag ON across the suite — the
+    /// process-wide slot's parallel-test hazard; the ENV_LOCK
+    /// serializes the flag's KATs).
+    #[test]
+    fn pinned_only_flag_slot_default_off_set_get_reset() {
+        let _g = crate::ENV_LOCK.lock().expect("env lock");
+        set_pinned_only(false);
+        assert!(!pinned_only(), "default OFF — the unpinned fallback stands (the L1/L2 behavior)");
+        set_pinned_only(true);
+        assert!(pinned_only(), "the strict posture is ON");
+        set_pinned_only(false);
+        assert!(!pinned_only(), "the reset for the sibling KATs");
     }
 }

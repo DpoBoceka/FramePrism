@@ -275,6 +275,15 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) verify: bool,
 
+    /// Strict posture: refuse the unpinned fallback (the self-described
+    /// encode) — when no camera profile resolves and the frames would
+    /// otherwise encode unpinned, the run is the named refusal (rc=2
+    /// before any frame). Absent (default) = the unpinned fallback
+    /// stands; a pin present + matching = the PINNED path, unchanged
+    /// (the flag is inert)
+    #[arg(long)]
+    pub(crate) pinned_only: bool,
+
     /// Overwrite/skip-over existing outputs (default: skip = resume)
     #[arg(long)]
     pub(crate) force: bool,
@@ -446,6 +455,7 @@ pub(crate) fn tier_cli(cli: &Cli, codec: CodecArg, to: Option<PathBuf>, report: 
         fast: cli.fast,
         trial: cli.trial,
         verify: cli.verify,
+        pinned_only: cli.pinned_only,
         force: cli.force,
         resume: cli.resume,
         subset: cli.subset,

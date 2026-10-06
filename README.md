@@ -55,7 +55,7 @@ downscale2x 17.12:1.
 ## Platforms and cameras
 
 - **Platform:** the contract build is macOS Apple Silicon (the gate toolchain: rustc 1.98.1 / clippy 0.1.98; MSRV 1.80); the prebuilt binaries also cover Linux (x86_64) + Windows (x86_64) (the Downloads); the source build works on all three platforms with the host-prefix setup (the Quick start).
-- **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. FramePrism encodes only the measured camera × mode combinations — the unmeasured ones are a named refusal, not a guess (docs/camera-profiles.md).
+- **Cameras:** the Sigma fp (A001) is profiled and measured at 8/10/12-bit. A matching camera profile carries the full contract (the frozen per-camera oracle class + the measured acceptance bounds); without one, frames that self-describe and confirm still encode (the unpinned mode — the CLI section below), and frames the tool cannot identify or confirm are a named refusal, not a guess (docs/camera-profiles.md).
 - **Distribution:** the source (this repository) + the prebuilt release binaries (the Downloads). No `cargo install`, crates.io package, or Homebrew package.
 
 ## Downloads
@@ -69,23 +69,50 @@ The desktop app binaries (`frameprism-gui-*`) ship on the same release page (the
 ## CLI
 
 `frameprism --help` is the single source of truth for the flag semantics (the design notes
-live in `docs/cli.md`). The current surface, straight from the binary:
+live in `docs/cli.md`).
+
+Camera profiles (`profiles/` — `docs/camera-profiles.md`) are the promotion to the full
+contract, not the gate: a matching profile carries the frozen per-camera oracle class, the
+measured acceptance bounds, and the cross-version byte contract. Without one, self-described
+frames (a readable camera identity + a confirmed layout) still encode — announced at start,
+verified on the round-trip per frame, no temporal acceptance; what the tool cannot identify
+or confirm is a named refusal. `--pinned-only` = the strict posture (the no-profile run is the named refusal instead of the unpinned encode).
+
+Pinning a new camera is the two-step loop — the measure → review → pin
+onboarding: run `frameprism profile-measure <SOURCE>... --out <FILE>` over a
+representative batch of the camera's footage (one or more trees of clips — a
+batch can span dirs) and the tool measures the structural constants (the
+readout×depth rows + the layout predicates) + the temporal bound from the
+batch's own frames, then writes the candidate profile to the path you give
+— nowhere else (`--out` is required). You review the candidate (it is a
+measured artifact, not a guess) and keep it with the camera's pins (the
+`profiles/` dir / the pin's probe path); from then on the camera is pinned
+(the full contract: the oracle class + the acceptance bounds + the
+cross-version byte contract). The honest limits, on the record: the bound
+is batch-relative (measure over a representative batch — a narrow batch
+yields a tight bound), the candidate is user-reviewed (the tool measures;
+you decide), and the structural rows are the footage's (over the A001
+footage the measured candidate reproduces the committed pin's rows — the
+pin is a function of the footage).
+
+The current surface, straight from the binary:
 
 <!-- frameprism-help-commands:begin — regenerate from the built binary's frameprism --help; the ci/check.sh drift gate byte-diffs this block; do not edit by hand -->
 ```
 Commands:
-  bake     Package an encoded clip dir into a tar[.zst] archive + a per-file sha256 manifest. --iso: write a mountable ISO image instead; --reel-out: ride the signed reel manifest + its .sig on the image
-  decode   Decode an encoded clip dir to 16-bit PAM frames
-  offload  Offload (mirror + verify) a source tree to one or more destinations — no encode: every file (the frames + the sidecars — any camera, any format) is re-scanned (sha256 — the source's bytes are read ONCE per file), copied to EVERY destination (mirrored subpaths, mtime preserved), re-scanned after each write, and rowed into the per-clip offload manifests at each destination (the `dest` header row is that dest) + the run report at each destination root (the report carries the whole run — every dest's status). The two forms: the single-source form — the positional `in` (the source) + the positional `to` dests (the legacy shape, byte-identical) — and the multi-source form — `--source <SOURCE>...` (the sources) + `--dest <DEST>...` (the dests; every source fanned to every dest in one job; the per-source work runs concurrently — one std::thread per source, the sources do not wait on each other; the per-dest-root artifacts ride the serialized tail after all sources join — one ascmhl generation per dest per job). The positionals are the single-source form's: the mixed-form/all-absent refusals are the named rc=2 bands. The camera/format detection is a report, never a gate (the offload copies + verifies any tree). Per-destination verification + status: rc=0 every row OK at every dest; rc=1 any dirty row at any dest (the named FAIL lines, after the run — every dest named); rc=2 the pre-write refusals (the self-mirror guard per dest, the duplicate-dest refusal, the per-dest writability probe — before any copy)
-  audit    Verify every file the sidecars list (size + sha256, + crc32c where present). rc=0 clean, rc=1 offenders named, rc=2 usage
-  restore  Re-copy audit offenders from a pristine master (the master must itself verify; the original is kept as <file>.pre-restore)
-  derive   Derive 8/10-bit working DNGs from 12-bit masters (pinned v>>4 / v>>2)
-  diff     Per-frame pixel comparison of two encodes; deterministic --report; --strict = exit 1 on any delta
-  repair   Re-copy + re-verify the dirty rows of an offload manifest from the source tree
-  ledger   Show the ops ledger + the rotation report (last audit older than N days)
-  sign     Sign the reel manifest (ed25519, deterministic; the manifest bytes are never touched)
-  verify   Verify a signed reel manifest (sha256 + key identity + signature)
-  help     Print this message or the help of the given subcommand(s)
+  bake             Package an encoded clip dir into a tar[.zst] archive + a per-file sha256 manifest. --iso: write a mountable ISO image instead; --reel-out: ride the signed reel manifest + its .sig on the image
+  decode           Decode an encoded clip dir to 16-bit PAM frames
+  offload          Offload (mirror + verify) a source tree to one or more destinations — no encode: every file (the frames + the sidecars — any camera, any format) is re-scanned (sha256 — the source's bytes are read ONCE per file), copied to EVERY destination (mirrored subpaths, mtime preserved), re-scanned after each write, and rowed into the per-clip offload manifests at each destination (the `dest` header row is that dest) + the run report at each destination root (the report carries the whole run — every dest's status). The two forms: the single-source form — the positional `in` (the source) + the positional `to` dests (the legacy shape, byte-identical) — and the multi-source form — `--source <SOURCE>...` (the sources) + `--dest <DEST>...` (the dests; every source fanned to every dest in one job; the per-source work runs concurrently — one std::thread per source, the sources do not wait on each other; the per-dest-root artifacts ride the serialized tail after all sources join — one ascmhl generation per dest per job). The positionals are the single-source form's: the mixed-form/all-absent refusals are the named rc=2 bands. The camera/format detection is a report, never a gate (the offload copies + verifies any tree). Per-destination verification + status: rc=0 every row OK at every dest; rc=1 any dirty row at any dest (the named FAIL lines, after the run — every dest named); rc=2 the pre-write refusals (the self-mirror guard per dest, the duplicate-dest refusal, the per-dest writability probe — before any copy)
+  audit            Verify every file the sidecars list (size + sha256, + crc32c where present). rc=0 clean, rc=1 offenders named, rc=2 usage
+  restore          Re-copy audit offenders from a pristine master (the master must itself verify; the original is kept as <file>.pre-restore)
+  derive           Derive 8/10-bit working DNGs from 12-bit masters (pinned v>>4 / v>>2)
+  diff             Per-frame pixel comparison of two encodes; deterministic --report; --strict = exit 1 on any delta
+  repair           Re-copy + re-verify the dirty rows of an offload manifest from the source tree
+  ledger           Show the ops ledger + the rotation report (last audit older than N days)
+  sign             Sign the reel manifest (ed25519, deterministic; the manifest bytes are never touched)
+  verify           Verify a signed reel manifest (sha256 + key identity + signature)
+  profile-measure  Measure the camera's structural constants over a batch of its footage (the bounded-read scan — read-only over the sources: one or more trees of clips, a camera batch can span dirs) + write the candidate profile to --out for review (the measure → review → pin onboarding — the candidate is a reviewed artifact: --out <FILE> is REQUIRED, the tool writes it where you say, nowhere else; the parent dir must exist — a missing parent is the named refusal, no partial write). The report (the coverage census + the class census + the divergent-tile bound — or the named zero-case line) is the stdout surface; the measured rows are the footage's (the pin is a function of the footage): review the candidate, keep it with the camera's pins to pin the camera
+  help             Print this message or the help of the given subcommand(s)
 ```
 <!-- frameprism-help-commands:end -->
 
