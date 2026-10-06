@@ -153,6 +153,13 @@ pub mod live;
 pub mod log10;
 pub mod lossy;
 pub mod lossydct;
+/// The profile-measure measurement core (the arc B L4 — the
+/// bounded-read scan over a source tree + the per-(geometry × depth)
+/// census + the temporal-bound derivation (the 4× house rule on the
+/// divergent-tile census) + the candidate-profile writer (the
+/// loader's inverse — the pure fn, no file write; see the module
+/// docs).
+pub mod measure;
 /// Two-destination ingest — the verified offload (the
 /// -cart pull-in): `--to <dir>` re-scans every file
 /// in the source tree, copies it to the dest (mirrored subpaths,
@@ -538,7 +545,7 @@ mod env_compat_tests {
     // wordings are unchanged.)
     #[test]
     fn media_reads_bounded_invariant_pinned() {
-        let surfaces: [(&str, usize); 58] = [
+        let surfaces: [(&str, usize); 59] = [
             (include_str!("ascmhl.rs"), 0),
             (include_str!("audit/entries.rs"), 0),
             (include_str!("audit/model.rs"), 0),
@@ -569,6 +576,7 @@ mod env_compat_tests {
             (include_str!("lossy.rs"), 0),
             (include_str!("lossydct.rs"), 0),
             (include_str!("main.rs"), 0),
+            (include_str!("measure.rs"), 3),
             (include_str!("offload/forms.rs"), 0),
             (include_str!("offload/manifests.rs"), 0),
             (include_str!("offload/mod.rs"), 0),
@@ -622,7 +630,7 @@ mod env_compat_tests {
         // frame-class scan's `BadIfdOffset` fallback; each fires its
         // named note line beside the read — + the temporal-oracle
         // neighbor read, silent by design) are in place.
-        let anchors: [(&str, &str); 20] = [
+        let anchors: [(&str, &str); 23] = [
             (include_str!("bake.rs"), "std::fs::read(output.join(&r.manifest_name))"),
             (include_str!("bake.rs"), "std::fs::read(staging.join(&r.manifest_name))"),
             (include_str!("bake.rs"), "std::fs::read(&ro_manifest).with_context(|| {"),
@@ -651,6 +659,16 @@ mod env_compat_tests {
             (include_str!("worker/encode.rs"), "std::fs::read(&cand_abs).ok()"),
             (include_str!("preflight.rs"), "match std::fs::read(path) {"),
             (include_str!("worker/report.rs"), "let full = match std::fs::read(src) {"),
+            // The measure pass's recorded keep sites (the arc B L4 —
+            // the bounded-read fence: the scan performs NO new read
+            // class — the pre-pass exception's full-file fallback,
+            // the transform-class frame read (the encode site's
+            // anchor pattern + wording), and the divergent-tile
+            // census's neighbor read (the oracle's read-only side —
+            // silent by design, the per-candidate cache's read)).
+            (include_str!("measure.rs"), "let full = match std::fs::read(src) {"),
+            (include_str!("measure.rs"), "std::fs::read(&abs).with_context(|| format!(\"read {}\", abs.display()))"),
+            (include_str!("measure.rs"), "std::fs::read(&nabs).ok()"),
             (include_str!("jxl.rs"), "std::fs::read(src).with_context(|| format!(\"read {}\", src.display()))?;"),
         ];
         for (module, anchor) in anchors {
@@ -662,7 +680,7 @@ mod env_compat_tests {
         // The wording pins (the converted
         // sites' error wordings are byte-identical to the pre-existing
         // ones).
-        let wordings: [(&str, &str); 20] = [
+        let wordings: [(&str, &str); 21] = [
             (include_str!("camera.rs"), "the offload detection sample {} is unreadable ({err})"),
             (include_str!("camera.rs"), "the offload detection sample {} does not parse ({err})"),
             (include_str!("camera.rs"), "cannot read the sample frame {}: {err}"),
@@ -683,6 +701,10 @@ mod env_compat_tests {
             (include_str!("bake.rs"), "read the object {}: {e}"),
             (include_str!("reel.rs"), "unreadable archive {a}: {err}"),
             (include_str!("checksums.rs"), "\"read {}\", path.display())"),
+            // The measure pass's fallback note wording (the pre-pass
+            // exception class — byte-identical to the worker/report
+            // site's line).
+            (include_str!("measure.rs"), "the camera-identity IFD beyond the 1 MiB detection prefix; reading the full file"),
         ];
         for (module, wording) in wordings {
             assert!(
