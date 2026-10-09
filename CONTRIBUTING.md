@@ -83,7 +83,7 @@ encode — build.rs never silently falls back to another location.
   generator, `ci/fixture-templates/generate_fixtures.py` — the
   fixtures' provenance authority) → release build + the suite gate
   (`cargo test --release --lib`, the pinned test count) → the
-  10-frame synthetic byte-identity oracle (67,762,584 B) from the
+  10-frame synthetic byte-identity oracle (72,325,126 B) from the
   committed `ci/oracle10/` fixture → the 10/8-bit JXL oracle (via
   `ci/check-108.sh`). Any failure is a named FAIL + rc=1 — no silent
   skips anywhere.

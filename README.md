@@ -6,7 +6,7 @@ pipeline. The default output is **j92** — a DNG container carrying lossless JP
 (the 21.1-generation measurement). Two working modes ride the same contract: `--mode log10` (10-bit log codes)
 and `--downscale2x` (a 2× downscale — ~10:1 for proxies).
 
-Known limits (0.2.0): the distribution is the source + the release-page binaries (the
+Known limits (0.3.0): the distribution is the source + the release-page binaries (the
 Downloads — the Quick start builds the source); the contract build is macOS Apple Silicon
 (the gate toolchain); the JXL tier's binaries are per-OS (macOS: the committed pin,
 out of the box; Linux/Windows: the host's cjxl/djxl 0.12.0 — a named refusal when
@@ -23,7 +23,7 @@ macOS (the gate toolchain — the committed prefix is the mac host's):
 
 ```sh
 cargo build --release --manifest-path tool/Cargo.toml  # build.rs links the committed deps/.jpeg-prefix
-./tool/target/release/frameprism --version             # frameprism 0.2.0
+./tool/target/release/frameprism --version             # frameprism 0.3.0
 
 # encode a clip (frames in → frames out; the run prints the summary:
 # the frame count, the bytes in/out, the ratio, the wall time):
@@ -49,8 +49,7 @@ bash ci/check.sh                                             # the whole gate (t
 ./tool/target/release/frameprism ci/oracle10/src /tmp/frameprism-demo --jobs 1
 ```
 
-Reference numbers (the committed 12-bit fixture, 225 frames): lossless 5.00:1 · log10 6.93:1 ·
-downscale2x 17.12:1.
+Reference numbers (the committed 12-bit fixture, 225 frames): lossless 4.94:1 · log10 6.74:1 · downscale2x 17.12:1 — measured at 0.3.0 on the same 225-frame clip (the lossless/log10 deltas = the Stage-1 selection-default flip's named give-up; downscale2x byte-identical to 0.1.0 — the untouched selection).
 
 ## Platforms and cameras
 
@@ -226,7 +225,7 @@ LICENSE          MIT license
 | `docs/card-workflow.md` | the direct card archive — the verify-before-unmount gate, the CARD UNLOCKED/REFUSED/UNVERIFIABLE verdict |
 | `docs/camera-profiles.md` | the per-camera pinned config — the profile format, the identity-vs-routing split, the named mismatch classes, the `FRAMEPRISM_PROFILES` resolution |
 | `docs/glossary.md` | terminology |
-| `docs/security.md` | the security posture + the vulnerability handling |
+| `docs/security.md` | the standing CI security posture — pinned-component determinism, the dependency audit + the C-boundary fuzz corpus wired into the gate |
 | `docs/third-party.md` | third-party attribution |
 | `CONTRIBUTING.md` | build contract, CI gate, corpus |
 
