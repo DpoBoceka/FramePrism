@@ -1,7 +1,10 @@
 # Architecture
 
-The tool is a single Rust binary (`tool/`) + a C shim for the libjpeg
-boundary. The core property: **byte surgery, not a TIFF rewrite** — the
+The repository is a Cargo workspace: the `frameprism` CLI package
+(`tool/`) + the `frameprism-gui` desktop app (`gui/` — the in-process
+encode surface over the same core the CLI dispatches; the README's
+GUI section) + a C shim for the libjpeg boundary. The core property:
+**byte surgery, not a TIFF rewrite** — the
 header bytes are kept identical, the compressed stream is written at the
 existing strip offset, and the tail is truncated. The supported camera
 profiles and committed verification fixtures constrain the measured layouts
@@ -21,12 +24,18 @@ input .dng (uncompressed, compression 1, 12-bit, 3856×2170, CFA 32803)
   │    64 tiles on a fixed 8×8 row-major grid (482×272; last row 266 →
   │    padded to 272 by the measured alternating-row rule)
   │    per tile: even/odd COLUMN split → 2 component planes
-  │    3-candidate trial-encode (the candidate set is profile/grid-specific)
+  │    selection: the fixed W7 candidate (wrap-PSV7) — the 482 grid's
+  │    DEFAULT (the Stage-1 selection-default flip: ≈2.7× clip-scale
+  │    encode at size parity with the measured per-frame band); the
+  │    3-candidate size-min trial-encode (smallest post-pad wins) rides
+  │    --trial (byte-frozen on its goldens); --fast is accepted as a
+  │    no-op on that grid (its behavior IS the default; every other
+  │    grid's selection untouched)
   │    (entropy engine: native Rust T.81, byte-identical to the libjpeg FFI
   │     path; FRAMEPRISM_ENGINE=ffi restores it. Stream
   │     structure per the patched libjpeg: SOF3, per-component DC DHTs —
-  │     see Build contract) · --fast: single fixed candidate (wrap-PSV7)
-  │    smallest post-pad wins; even-byte tile padding (0x00 after FFD9
+  │     see Build contract)
+  │    even-byte tile padding (0x00 after FFD9
   │    when odd)
   │  log10:          the log LUT (identity 0..255, compresses 256..4095)
   │                 embedded via 50712, BPS 10, then the lossless path
@@ -107,6 +116,9 @@ green only with the patched libjpeg prefix (see below).
 | `tiff.rs` | IFD parse (read-only), tag bookkeeping |
 | `pack12.rs` | 12-bit standard-DNG pack/unpack |
 | `tileenc.rs` | the lossless tile encoder (tile plan, even/odd split, 3-candidate trial-encode, padding) |
+| `measure.rs` | the profile-measure verb's core (the bounded-read scan, the structural + temporal measurements, the candidate profile write) |
+| `frameclass.rs` | the mixed-input frame classifier (the raw / fp-camera-lossless per-frame dispatch) |
+| `fastenc.rs` / `fastdec.rs` | the native fast encode/decode paths (the T.81 SOF3 entropy encoder + the table-driven SOF3 decoder) |
 | `ljpeg_shim.c` + `lib.rs` FFI | the libjpeg C boundary (bindgen-verified signatures) |
 | `surgery.rs` | the byte-surgery writer (tag plan, offset shift, atomic write) |
 | `lossydct.rs` | the dct12 encoder (DEFERRED family) + the env-gated cast levers (`FRAMEPRISM_ERASURE`, `FRAMEPRISM_DCDC_CONSTS` — off by default) |

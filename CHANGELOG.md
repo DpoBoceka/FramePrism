@@ -48,7 +48,7 @@ All notable changes to frameprism.
 - The README Known-limits fix — the stale "card `wipe` verb" line is gone (the no-wipe property is a design — `docs/card-workflow.md` — not a limit; the auto-eject is implemented, no longer a limit).
 - The dependency freshness — the dalek-3 signing stack, the 3-OS actions, the grouped dependabot.
 - The JXL platform posture — the absent/unspawnable cjxl/djxl binary is the named rc=2 refusal before the first byte (zero residuals — no output dir, no ingest manifest, no ledger row) + the per-OS posture docs (the committed pin on macOS, the host's 0.12.0 binaries on Linux/Windows — `docs/jxl-tier.md`) + the Windows capability disclosure (the encode path is the unix-only named refusal at the preflight; the check/audit/decode verbs are unaffected).
-- The oracle re-anchor — the docs + the test doc comments carry the acceptance model explicitly: per-row acceptance = the bit-exact round-trip + the per-gate structural pins + the NLE spot-check; the format-origin vendor's outputs are the interop evidence + the benchmark, never the byte spec (the `ci/` synthetic oracles + the round-trip are the anchors).
+- The oracle re-anchor — the docs + the test doc comments carry the acceptance model explicitly: per-row acceptance = the bit-exact round-trip + the per-gate structural pins + the NLE spot-check; the format-origin reference product's outputs are the interop evidence + the benchmark, never the byte spec (the `ci/` synthetic oracles + the round-trip are the anchors).
 
 ## 0.1.1
 

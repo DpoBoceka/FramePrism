@@ -589,6 +589,44 @@ missing or corrupt envelope / the corrupt key file — zero partial
 verdicts; the audit's ABSENT line is the audit's honesty surface, the
 verify's missing-.sig is the usage refusal).
 
+### `profile-measure`
+
+The measure → review → pin onboarding (the camera pinning's two-step
+loop's first step): `frameprism profile-measure <SOURCE>... --out
+<FILE>` scans one or more trees of the camera's clips read-only (the
+bounded-read pass — the sources are never modified; a camera batch
+can span dirs — the per-source measurements merge as a pure census:
+the per-readout counts summed, the class census merged, the bound
+over the batch's merged divergent-tile census) and measures the
+structural constants (the readout×depth rows + the layout
+predicates) + the temporal bound (4× the batch's measured worst
+whole-body-divergent-tile delta — the zero-divergent batch omits the
+bound, the named line stands), then writes the candidate profile to
+the explicit `--out` path only.
+
+`--out <FILE>` is REQUIRED (the candidate is a reviewed artifact —
+the tool writes it where you say, nowhere else). The named refusals
+(verbatim; rc=2, before the first read / write):
+
+- absent `--out`: `usage: profile-measure requires --out <FILE> (the candidate profile is a reviewed artifact — the tool writes it where you say, nowhere else)`
+- a missing `--out` parent dir: `usage: profile-measure --out <path>: the parent dir does not exist (the candidate profile is a reviewed artifact written to the explicit --out path only — no dir is created, no partial write)`
+- a non-directory SOURCE: `profile-measure: SOURCE is not a directory: <path>`
+
+The write is the atomic temp+rename at the `--out` path (nothing
+else is written — the sources are untouched; the candidate is the
+verb's only artifact). The report (the coverage census per readout +
+the class census + the divergent-tile census — or the named
+zero-case line) is the stdout surface (the measure's output IS the
+report).
+
+Honest limits, on the record: the bound is batch-relative (measure
+over a representative batch — a narrow batch yields a tight bound),
+the candidate is user-reviewed (the tool measures; the user
+decides), and the structural rows are the footage's (over the A001
+footage the measured candidate reproduces the committed pin's
+twelve geometry rows byte-identically — the pin is a function of the
+footage).
+
 ## Legacy encode surface (the positional `input` / `output`)
 
 ### The positionals
@@ -666,6 +704,36 @@ candidates per tile, the smallest stream wins. On the
 other grids: accepted-but-inert (the shipped selection is
 unaffected). Mutually exclusive with `--fast` (the named rc=2).
 
+### `--pinned-only`
+
+The strict posture (default off): refuse the unpinned fallback (the
+self-described encode) — when no camera profile resolves and the
+frames would otherwise encode unpinned, the run is the named refusal
+(rc=2 before any frame):
+`refusal: --pinned-only (the strict posture) is on — no pin
+resolves, and the unpinned fallback is disabled (encode with the
+flag removed, or supply the measured profile file)`. Absent
+(default) = the unpinned fallback stands: a no-profile run of
+self-described frames (a readable camera identity + the shipped
+layout predicates confirmed against the frame's own data) encodes,
+announced at start with the named line (verbatim):
+`unpinned encode: MAKE MODEL WxH @B-bit (self-described; no pin —
+verify-on, no temporal acceptance; to pin this camera: the measured
+profile file)`. The unpinned output is verified on the round-trip
+per frame (the forced round-trip is the unpinned archive's only
+falsifiability — the guard is not escapable); the temporal
+acceptance is unavailable in the unpinned mode (it is pinned to the
+frozen oracle class). A pin present + matching = the PINNED path,
+unchanged (the flag is inert). Frames the tool cannot identify or
+confirm are the named refusal (rc=2 before any frame, nothing
+written) in both postures.
+
+Honest limits, on the record: an unpinned archive has no frozen
+oracle (it is falsifiable per-frame at encode time; it is not
+byte-pinned across tool versions — the promotion exists), and the
+verify cost is real (the forced round-trip is measured ≈ 2× the wall
+on the 723-frame mixed clip).
+
 ### `--resume`
 
 The per-frame skip decision is a
@@ -701,6 +769,44 @@ ledger row carries the same marker in its `context` column. Absent (the
 default) = the unconditional hard gate (the R3 no-escape-flag posture
 — the byte-identity path; this is the NAMED door, not an escape
 hatch). Both encode paths (j92 + jxl) honor it identically.
+
+### The mixed-compression input (+ `--carry`)
+
+A clip may mix raw (uncompressed) frames and fp-camera lossless
+frames in one encode: the frame classifier dispatches each frame to
+its own path — the raw frames to the archive's raw path, the
+fp-camera lossless frames to the transcode path through the archive's
+encode (the transcode default: the fp frame is decoded +
+re-encoded through the archive path so every output frame is in the
+measured archive contract).
+
+`--carry`: the eligible fp frames ride carried (the byte-exact
+source copy, untranscoded) instead of the transcode. A no-op outside
+the fp-camera class (the raw-only behavior is untouched by
+construction). The per-frame provenance rides in the run report's
+`## frameclass — the per-frame provenance (the mixed-compression
+contract)` section (the mixed-only surface — present when the
+carried count is > 0).
+
+The temporal-oracle acceptance for the whole-body-divergent tile: a
+mixed clip's whole-body-divergent fp tile is accepted when its
+decoded plane matches the decoded same-class fp neighbor's same-tile
+plane within the pinned temporal bound (the temporal oracle — it
+adds acceptance only; every existing refusal stands unchanged
+otherwise).
+
+The dry-run over a mixed clip carries the both-estimates line
+(named — the stdout + the `--report` surface; the fit-check reserves
+the worst of the two plans):
+`estimate: both estimates (the mixed clip — carried vs transcoded: size + ETA) — carried (--carry): {worst} B worst / {likely} B likely / {best} B best encoded + {carried} B carried (exact) = {total} B worst; ETA encode+verify {n} (p50) / {n} (p95) (the raw frames' encode — the fp byte copy is an unmeasured path, honestly named) — transcoded (the transcode default): {worst} B worst / {likely} B likely / {best} B best; ETA encode+verify {n} (p50) / {n} (p95); the fit-check = the worst of the two plans (both named)`
+(the `{…}` slots are the measured numbers).
+
+The `FRAMEPRISM_PROFILE=1` profiler sidecar: the transcode path
+writes `<dest>/.frameprism-profile.tsv` (the 8-phase contract per
+frame: read / fp-input-decode / fp-input-drill / source-synth /
+archive-encode / archive-drill / fidelity-decode /
+fidelity-compare). The gate absent or other = the byte-frozen
+default (no sidecar, no output change).
 
 ### `--dry-run` / `--dry-run-frames`
 

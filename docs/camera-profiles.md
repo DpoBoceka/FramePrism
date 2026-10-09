@@ -38,6 +38,40 @@ depends on the measurement; the copy's does not). The A001
 profile's meaning is unchanged (the transform's identity record —
 the pass-through never consumes it).
 
+## The profile is the promotion, not the gate
+
+The self-describing encode (the 0.3.0 update to the FROZEN posture
+above): the profile is the **promotion to the pinned contract, not
+the gate**. A matching profile carries the full contract — the
+frozen per-camera oracle class, the measured acceptance bounds, and
+the cross-version byte contract.
+
+**The self-describing posture (the unpinned default):** with no
+profile resolvable, frames that self-describe (a readable camera
+identity) and whose structure the shipped layout predicates confirm
+against the frame's own data still encode. The run announces the
+unpinned mode at start with the named line (verbatim):
+`unpinned encode: MAKE MODEL WxH @B-bit (self-described; no pin —
+verify-on, no temporal acceptance; to pin this camera: the measured
+profile file)`. Every frame is verified on the round-trip (the
+unpinned output's only falsifiability — the guard is not escapable),
+and the temporal acceptance is unavailable in the unpinned mode (it
+is pinned to the frozen oracle class — the whole-body-divergent tile
+keeps its existing named refusal). Frames the tool cannot identify or
+confirm are the named refusal (rc=2 before any frame, nothing
+written). The pinned path is byte-identical (the oracles' totals
+stand).
+
+**`--pinned-only` (the strict posture):** default off — with the
+flag, the no-profile run is the named refusal instead of the
+unpinned encode (the flag's semantics: `docs/cli.md`).
+
+**The `profile-measure` onboarding (the measure → review → pin
+loop):** the README's CLI section carries the paragraph — measure a
+representative batch over one or more trees of the camera's footage
+with `frameprism profile-measure <SOURCE>... --out <FILE>`, review
+the measured candidate, and keep it with the camera's pins.
+
 ## The profile file (the records pattern)
 
 `profiles/<camera>.profile` — the `# frameprism camera profile` magic
