@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install the Rust toolchain (1.98)
-        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
         with:
           toolchain: "1.98"
 
@@ -105,13 +105,13 @@ jobs:
           cargo build --locked --release --bin frameprism-gui
 
       - name: Upload the macos artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-macos-aarch64
           path: target/release/frameprism
 
       - name: Upload the gui artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-gui-macos-aarch64
           path: target/release/frameprism-gui
@@ -141,7 +141,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install the Rust toolchain (1.98)
-        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
         with:
           toolchain: "1.98"
 
@@ -176,13 +176,13 @@ jobs:
           cargo build --locked --release --bin frameprism-gui
 
       - name: Upload the linux artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-linux-x86_64
           path: target/release/frameprism
 
       - name: Upload the gui artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-gui-linux-x86_64
           path: target/release/frameprism-gui
@@ -210,7 +210,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install the Rust toolchain (1.98)
-        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
         with:
           toolchain: "1.98"
 
@@ -250,13 +250,13 @@ jobs:
           cargo test --locked --release --lib -- cycle_guard
 
       - name: Upload the windows artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-windows-x86_64.exe
           path: target/release/frameprism.exe
 
       - name: Upload the gui artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: frameprism-gui-windows-x86_64.exe
           path: target/release/frameprism-gui.exe
@@ -278,37 +278,37 @@ jobs:
       contents: write   # the softprops/action-gh-release publish is the single contents-write consumer (create the release + its assets on the tag's ref)
     steps:
       - name: Download the macos artifact (its own subdir — the file inside is `frameprism`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-macos-aarch64
           path: dist/macos
 
       - name: Download the linux artifact (its own subdir — the file inside is `frameprism`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-linux-x86_64
           path: dist/linux
 
       - name: Download the windows artifact (its own subdir — the file inside is `frameprism.exe`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-windows-x86_64.exe
           path: dist/windows
 
       - name: Download the gui macos artifact (its own subdir — the file inside is `frameprism-gui`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-gui-macos-aarch64
           path: dist/guimacos
 
       - name: Download the gui linux artifact (its own subdir — the file inside is `frameprism-gui`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-gui-linux-x86_64
           path: dist/guilinux
 
       - name: Download the gui windows artifact (its own subdir — the file inside is `frameprism-gui.exe`)
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: frameprism-gui-windows-x86_64.exe
           path: dist/guiwindows
